@@ -1,0 +1,35 @@
+{
+  "proxy": {
+    "enabled": true,
+    "protocol": "http",
+    "host": "your-residential-proxy.com",
+    "port": 1000,
+    "username": "your_username",
+    "password": "your_password"
+  },
+  "kookeey": {
+    "enabled": false,
+    "host": "gate.kookeey.info",
+    "port": 1000,
+    "username": "your_kookeey_user",
+    "passwordPrefix": "your_kookeey_pass",
+    "localProxy": {
+      "host": "127.0.0.1",
+      "port": 10809
+    }
+  },
+  "projects": [
+    {
+      "id": "my-brand",
+      "name": "My Brand",
+      "enabled": true,
+      "keywords": {
+        "brand": ["mybrand", "mybrand.com"],
+        "industry": ["industry keyword 1", "industry keyword 2"],
+        "competitor": ["competitor1", "competitor2"]
+      },
+      "subreddits": ["relevant_subreddit_1", "relevant_subreddit_2"]
+    }
+  ],
+  "pollIntervalMinutes": 8
+}
