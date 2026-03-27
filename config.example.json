@@ -1,37 +1,29 @@
 {
   "proxy": {
-    "enabled": true,
+    "enabled": false,
     "protocol": "http",
-    "host": "your-residential-proxy.com",
+    "host": "",
     "port": 1000,
-    "username": "your_username",
-    "password": "your_password"
+    "username": "",
+    "password": ""
   },
   "kookeey": {
-    "enabled": false,
-    "host": "gate.kookeey.info",
-    "port": 1000,
-    "username": "your_kookeey_user",
-    "passwordPrefix": "your_kookeey_pass",
-    "localProxy": {
-      "host": "127.0.0.1",
-      "port": 10809
-    }
+    "enabled": false
   },
   "projects": [
     {
-      "id": "my-brand",
-      "name": "My Brand",
+      "id": "demo",
+      "name": "Demo Project",
       "enabled": true,
       "keywords": {
-        "brand": ["mybrand", "mybrand.com"],
-        "industry": ["industry keyword 1", "industry keyword 2"],
-        "competitor": ["competitor1", "competitor2"]
+        "brand": [],
+        "industry": [],
+        "competitor": []
       },
-      "subreddits": ["relevant_subreddit_1", "relevant_subreddit_2"]
+      "subreddits": []
     }
   ],
-  "pollIntervalMinutes": 8,
+  "pollIntervalMinutes": 15,
   "webPort": 3000,
-  "webPassword": "changeme"
+  "webPassword": "admin"
 }
