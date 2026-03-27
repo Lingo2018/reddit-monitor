@@ -129,6 +129,26 @@ app.put('/api/config', auth, (req, res) => {
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 
+// --- AI Test ---
+app.get('/api/ai-test', auth, async (req, res) => {
+  const cfg = loadConfig();
+  if (!cfg.ai?.apiKey || !cfg.ai?.endpoint) {
+    return res.json({ ok: false, error: 'AI not configured (missing endpoint or apiKey)' });
+  }
+  try {
+    const { analyzeBatch } = await import('./analyzer.js');
+    const testItem = [{ id: 'test', project: 'test', type: 'comment', title: 'Test', body: 'This is a test comment for connection check.', author: 'test', subreddit: 'test' }];
+    const results = await analyzeBatch(cfg.ai, testItem);
+    if (results.length > 0) {
+      res.json({ ok: true, model: cfg.ai.model || 'default' });
+    } else {
+      res.json({ ok: false, error: 'No analysis result returned' });
+    }
+  } catch (e) {
+    res.json({ ok: false, error: e.message });
+  }
+});
+
 // --- Combined Stats (one request instead of two) ---
 app.get('/api/stats', auth, (req, res) => {
   const { project } = req.query;

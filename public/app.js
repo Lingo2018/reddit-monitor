@@ -37,6 +37,7 @@ const i18n = {
     saveFailed: '保存失败：',
     allMarkedRead: '已全部标为已读',
     post: '帖子', comment: '评论',
+    testAi: '测试连接', testAiOk: '连接成功', testAiFail: '连接失败：', testAiTesting: '测试中...',
     comingSoon: '暂不可用',
     noReports: '暂无报告，数据累积后将自动生成每日舆情报告',
     reportDate: '日期', reportTotal: '总数', reportSentiment: '情感分布',
@@ -76,6 +77,7 @@ const i18n = {
     saveFailed: 'Save failed: ',
     allMarkedRead: 'All marked as read',
     post: 'post', comment: 'comment',
+    testAi: 'Test Connection', testAiOk: 'Connected!', testAiFail: 'Failed: ', testAiTesting: 'Testing...',
     comingSoon: 'Coming soon',
     noReports: 'No reports yet. Daily reports will be auto-generated once data accumulates.',
     reportDate: 'Date', reportTotal: 'Total', reportSentiment: 'Sentiment',
@@ -272,7 +274,7 @@ async function renderData() {
           <td>${r.type === 'post' ? t('post') : t('comment')}</td>
           <td>${sentimentBadge(r.sentiment)}</td>
           <td>r/${r.subreddit}</td>
-          <td class="truncate"><a class="reddit-link" href="https://reddit.com${r.permalink}" target="_blank">${esc(r.title || r.body?.slice(0, 80) || '-')}</a></td>
+          <td class="truncate"><a class="reddit-link" href="https://reddit.com${r.permalink}" target="_blank">${esc(r.type === 'comment' ? (r.body?.slice(0, 100) || r.title || '-') : (r.title || '-'))}</a></td>
           <td class="truncate" style="max-width:200px;color:var(--text-light)">${esc(r.ai_summary || '-')}</td>
           <td>${r.score}</td>
         </tr>`).join('')}</tbody>
@@ -396,6 +398,10 @@ async function renderConfig() {
           <label>${t('aiModel')}</label>
           <input id="c-ai-model" value="${cfg.ai?.model || 'claude-sonnet-4-20250514'}" autocomplete="off">
         </div>
+      </div>
+      <div style="margin-top:8px">
+        <button class="btn btn-outline btn-sm" id="test-ai">${t('testAi')}</button>
+        <span id="test-ai-result" style="margin-left:10px;font-size:13px"></span>
       </div>
     </div>
 
@@ -534,6 +540,26 @@ async function renderConfig() {
       toast(t('configSaved'));
     } catch (e) {
       toast(t('saveFailed') + e.message);
+    }
+  };
+
+  $('#test-ai').onclick = async () => {
+    const result = $('#test-ai-result');
+    result.textContent = t('testAiTesting');
+    result.style.color = 'var(--text-muted)';
+    try {
+      const res = await api('/ai-test');
+      const d = await res.json();
+      if (d.ok) {
+        result.textContent = t('testAiOk') + (d.model ? ` (${d.model})` : '');
+        result.style.color = '#4caf50';
+      } else {
+        result.textContent = t('testAiFail') + (d.error || 'unknown');
+        result.style.color = '#e53935';
+      }
+    } catch (e) {
+      result.textContent = t('testAiFail') + e.message;
+      result.style.color = '#e53935';
     }
   };
 }
