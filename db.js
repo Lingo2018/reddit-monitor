@@ -12,8 +12,6 @@ db.pragma('busy_timeout = 5000');
 // 迁移：如果旧表没有 project 列，加上
 try {
   db.exec(`ALTER TABLE mentions ADD COLUMN project TEXT NOT NULL DEFAULT 'default'`);
-  db.exec(`UPDATE mentions SET project = 'curtarra' WHERE project = 'default'`);
-  // 重建 PK 需要重建表，但 SQLite 不支持 ALTER PK，所以用复合唯一索引代替
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_id_project ON mentions(id, project)`);
   console.log('[db] 迁移完成: 添加 project 列');
 } catch {}

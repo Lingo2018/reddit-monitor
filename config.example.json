@@ -31,5 +31,7 @@
       "subreddits": ["relevant_subreddit_1", "relevant_subreddit_2"]
     }
   ],
-  "pollIntervalMinutes": 8
+  "pollIntervalMinutes": 8,
+  "webPort": 3000,
+  "webPassword": "changeme"
 }

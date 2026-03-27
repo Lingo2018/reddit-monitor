@@ -2,6 +2,7 @@ import { loadConfig } from './config.js';
 import { createFetcher, createKookeeyFetcher } from './fetcher.js';
 import { matchItem, classifyMatches, expandKeywords } from './matcher.js';
 import { saveMentions, logPoll, logCommentRate } from './db.js';
+import app from './server.js';
 
 let roundCount = 0;
 
@@ -162,5 +163,7 @@ async function loop() {
 
 log('Reddit Monitor 启动');
 const initConfig = loadConfig();
+const webPort = initConfig.webPort || 3000;
+app.listen(webPort, () => log(`Web UI: http://localhost:${webPort}`));
 log(`项目: ${initConfig.projects.map(p => p.id).join(', ') || '无'}`);
 loop();
