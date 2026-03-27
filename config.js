@@ -39,6 +39,7 @@ export function loadConfig() {
         : null,
     },
     kookeey: cfg.kookeey || null,
+    ai: cfg.ai || null,
   };
 }
 
@@ -47,13 +48,14 @@ export function getConfigForUI() {
   // Mask passwords
   if (cfg.proxy?.password) cfg.proxy.password = '***';
   if (cfg.kookeey?.passwordPrefix) cfg.kookeey.passwordPrefix = '***';
+  if (cfg.ai?.apiKey) cfg.ai.apiKey = '***';
   delete cfg.webPassword;
   return cfg;
 }
 
 export function saveConfig(updates) {
   const cfg = readRaw();
-  const allowed = ['projects', 'pollIntervalMinutes', 'proxy', 'kookeey', 'webPassword'];
+  const allowed = ['projects', 'pollIntervalMinutes', 'proxy', 'kookeey', 'webPassword', 'ai'];
 
   for (const key of allowed) {
     if (updates[key] !== undefined) {
@@ -68,6 +70,11 @@ export function saveConfig(updates) {
           updates.kookeey.passwordPrefix = cfg.kookeey.passwordPrefix;
         }
         cfg.kookeey = { ...cfg.kookeey, ...updates.kookeey };
+      } else if (key === 'ai' && cfg.ai && updates.ai) {
+        if (!updates.ai.apiKey || updates.ai.apiKey === '***') {
+          updates.ai.apiKey = cfg.ai.apiKey;
+        }
+        cfg.ai = { ...cfg.ai, ...updates.ai };
       } else {
         cfg[key] = updates[key];
       }

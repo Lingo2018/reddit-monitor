@@ -170,6 +170,60 @@ app.get('/api/poll-log', auth, (req, res) => {
   res.json(rows);
 });
 
+// --- Analysis data (joined with mentions) ---
+app.get('/api/mentions-analyzed', auth, (req, res) => {
+  const { project, type, search, timeRange, page = 1, limit = 50 } = req.query;
+  const offset = (Math.max(1, +page) - 1) * +limit;
+  const wheres = [];
+  const params = [];
+
+  if (project) { wheres.push('m.project = ?'); params.push(project); }
+  if (type) { wheres.push('m.type = ?'); params.push(type); }
+  if (search) { wheres.push("(m.title LIKE ? OR m.body LIKE ?)"); params.push(`%${search}%`, `%${search}%`); }
+  if (timeRange) {
+    const hours = { '24h': 24, '7d': 168, '30d': 720 }[timeRange];
+    if (hours) {
+      wheres.push('m.discovered_at >= ?');
+      params.push(new Date(Date.now() - hours * 3600000).toISOString());
+    }
+  }
+
+  const where = wheres.length ? 'WHERE ' + wheres.join(' AND ') : '';
+  const total = db.prepare(`SELECT COUNT(*) as c FROM mentions m LEFT JOIN analysis a ON m.id = a.mention_id AND m.project = a.project ${where}`).get(...params).c;
+  const rows = db.prepare(`SELECT m.*, a.sentiment, a.relevance, a.pros as ai_pros, a.cons as ai_cons, a.actionable, a.summary as ai_summary FROM mentions m LEFT JOIN analysis a ON m.id = a.mention_id AND m.project = a.project ${where} ORDER BY m.created_utc DESC LIMIT ? OFFSET ?`).all(...params, +limit, offset);
+  res.json({ rows, total, page: +page, pages: Math.ceil(total / +limit) });
+});
+
+// --- Daily Reports ---
+app.get('/api/reports', auth, (req, res) => {
+  const { project, limit = 30 } = req.query;
+  const pw = project ? 'WHERE project = ?' : '';
+  const pp = project ? [project] : [];
+  const rows = db.prepare(`SELECT * FROM daily_reports ${pw} ORDER BY report_date DESC LIMIT ?`).all(...pp, +limit);
+  res.json(rows);
+});
+
+app.get('/api/reports/:date', auth, (req, res) => {
+  const { project } = req.query;
+  const row = db.prepare('SELECT * FROM daily_reports WHERE report_date = ? AND project = ?').get(req.params.date, project || '');
+  if (!row) return res.status(404).json({ error: 'not found' });
+  res.json(row);
+});
+
+// --- Analysis Stats ---
+app.get('/api/analysis-stats', auth, (req, res) => {
+  const { project } = req.query;
+  const pw = project ? 'WHERE a.project = ?' : '';
+  const pp = project ? [project] : [];
+
+  const sentiments = db.prepare(`SELECT a.sentiment, COUNT(*) as count FROM analysis a ${pw} GROUP BY a.sentiment`).all(...pp);
+  const analyzed = db.prepare(`SELECT COUNT(*) as c FROM analysis a ${pw}`).get(...pp).c;
+  const totalMentions = db.prepare(`SELECT COUNT(*) as c FROM mentions ${project ? 'WHERE project = ?' : ''}`).get(...pp).c;
+  const actionable = db.prepare(`SELECT COUNT(*) as c FROM analysis a ${pw ? pw + ' AND' : 'WHERE'} a.actionable = 1`).get(...pp).c;
+
+  res.json({ sentiments, analyzed, totalMentions, actionable });
+});
+
 // SPA fallback
 app.get('/{*splat}', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));

@@ -92,6 +92,15 @@ a.reddit-link:hover { text-decoration: underline; }
 .toast { position: fixed; bottom: 20px; right: 20px; background: #333; color: #fff; padding: 10px 20px; border-radius: 8px; font-size: 13px; z-index: 999; animation: fadeIn .3s; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
+/* Report */
+.report-content { font-size: 14px; line-height: 1.8; }
+.report-content h2 { font-size: 18px; margin: 20px 0 10px; color: var(--primary); }
+.report-content h3 { font-size: 16px; margin: 16px 0 8px; color: var(--text); }
+.report-content h4 { font-size: 14px; margin: 12px 0 6px; }
+.report-content ul { padding-left: 20px; margin: 8px 0; }
+.report-content li { margin: 4px 0; }
+.report-content strong { color: var(--text); }
+
 /* Responsive */
 @media (max-width: 640px) {
   .stats-grid { grid-template-columns: 1fr 1fr; }

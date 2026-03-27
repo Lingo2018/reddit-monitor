@@ -111,4 +111,109 @@ export function existsId(id) {
   return !!db.prepare('SELECT 1 FROM mentions WHERE id = ?').get(id);
 }
 
+// --- Analysis tables ---
+db.exec(`
+  CREATE TABLE IF NOT EXISTS analysis (
+    mention_id TEXT NOT NULL,
+    project TEXT NOT NULL,
+    sentiment TEXT DEFAULT 'neutral',
+    relevance TEXT DEFAULT 'low',
+    pros TEXT DEFAULT '[]',
+    cons TEXT DEFAULT '[]',
+    actionable INTEGER DEFAULT 0,
+    summary TEXT DEFAULT '',
+    analyzed_at TEXT,
+    PRIMARY KEY (mention_id, project)
+  );
+  CREATE INDEX IF NOT EXISTS idx_analysis_sentiment ON analysis(sentiment);
+  CREATE INDEX IF NOT EXISTS idx_analysis_project ON analysis(project);
+
+  CREATE TABLE IF NOT EXISTS daily_reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project TEXT NOT NULL,
+    report_date TEXT NOT NULL,
+    positive_count INTEGER DEFAULT 0,
+    negative_count INTEGER DEFAULT 0,
+    neutral_count INTEGER DEFAULT 0,
+    total_count INTEGER DEFAULT 0,
+    actionable_count INTEGER DEFAULT 0,
+    top_pros TEXT DEFAULT '[]',
+    top_cons TEXT DEFAULT '[]',
+    full_report TEXT DEFAULT '',
+    created_at TEXT
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_report_date ON daily_reports(project, report_date);
+`);
+
+const insertAnalysis = db.prepare(`
+  INSERT OR REPLACE INTO analysis (mention_id, project, sentiment, relevance, pros, cons, actionable, summary, analyzed_at)
+  VALUES (@mention_id, @project, @sentiment, @relevance, @pros, @cons, @actionable, @summary, @analyzed_at)
+`);
+
+export function saveAnalysisBatch(results) {
+  const tx = db.transaction((items) => {
+    for (const r of items) insertAnalysis.run(r);
+  });
+  tx(results);
+}
+
+export function getUnanalyzedMentions(project, limit = 20) {
+  return db.prepare(`
+    SELECT m.* FROM mentions m
+    LEFT JOIN analysis a ON m.id = a.mention_id AND m.project = a.project
+    WHERE m.project = ? AND a.mention_id IS NULL AND (m.body IS NOT NULL AND m.body != '')
+    ORDER BY m.discovered_at DESC LIMIT ?
+  `).all(project, limit);
+}
+
+export function getDailyAnalysisStats(project, date) {
+  const dayStart = date + 'T00:00:00.000Z';
+  const dayEnd = date + 'T23:59:59.999Z';
+
+  const total = db.prepare(`SELECT COUNT(*) as c FROM mentions m JOIN analysis a ON m.id = a.mention_id AND m.project = a.project WHERE m.project = ? AND m.discovered_at BETWEEN ? AND ?`).get(project, dayStart, dayEnd)?.c || 0;
+  const posts = db.prepare(`SELECT COUNT(*) as c FROM mentions WHERE project = ? AND type = 'post' AND discovered_at BETWEEN ? AND ?`).get(project, dayStart, dayEnd)?.c || 0;
+  const comments = db.prepare(`SELECT COUNT(*) as c FROM mentions WHERE project = ? AND type = 'comment' AND discovered_at BETWEEN ? AND ?`).get(project, dayStart, dayEnd)?.c || 0;
+
+  const sentiments = db.prepare(`SELECT a.sentiment, COUNT(*) as c FROM mentions m JOIN analysis a ON m.id = a.mention_id AND m.project = a.project WHERE m.project = ? AND m.discovered_at BETWEEN ? AND ? GROUP BY a.sentiment`).all(project, dayStart, dayEnd);
+  const sMap = {};
+  sentiments.forEach(s => sMap[s.sentiment] = s.c);
+
+  const actionable = db.prepare(`SELECT COUNT(*) as c FROM mentions m JOIN analysis a ON m.id = a.mention_id AND m.project = a.project WHERE m.project = ? AND a.actionable = 1 AND m.discovered_at BETWEEN ? AND ?`).get(project, dayStart, dayEnd)?.c || 0;
+
+  // Aggregate pros and cons
+  const allAnalysis = db.prepare(`SELECT a.pros, a.cons, a.sentiment, a.summary, a.relevance FROM mentions m JOIN analysis a ON m.id = a.mention_id AND m.project = a.project WHERE m.project = ? AND m.discovered_at BETWEEN ? AND ?`).all(project, dayStart, dayEnd);
+
+  const prosCount = {};
+  const consCount = {};
+  const samples = [];
+
+  for (const a of allAnalysis) {
+    try { JSON.parse(a.pros).forEach(p => { prosCount[p] = (prosCount[p] || 0) + 1; }); } catch {}
+    try { JSON.parse(a.cons).forEach(c => { consCount[c] = (consCount[c] || 0) + 1; }); } catch {}
+    if (a.relevance === 'high' && samples.length < 10) {
+      samples.push({ sentiment: a.sentiment, summary: a.summary });
+    }
+  }
+
+  const topPros = Object.entries(prosCount).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([text, count]) => ({ text, count }));
+  const topCons = Object.entries(consCount).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([text, count]) => ({ text, count }));
+
+  return {
+    total, posts, comments,
+    positive: sMap.positive || 0,
+    negative: sMap.negative || 0,
+    neutral: sMap.neutral || 0,
+    actionable, topPros, topCons, samples,
+  };
+}
+
+const insertReport = db.prepare(`
+  INSERT OR REPLACE INTO daily_reports (project, report_date, positive_count, negative_count, neutral_count, total_count, actionable_count, top_pros, top_cons, full_report, created_at)
+  VALUES (@project, @report_date, @positive_count, @negative_count, @neutral_count, @total_count, @actionable_count, @top_pros, @top_cons, @full_report, @created_at)
+`);
+
+export function saveDailyReport(report) {
+  return insertReport.run(report);
+}
+
 export default db;

@@ -6,24 +6,29 @@ const navbar = $('#navbar');
 const i18n = {
   zh: {
     title: 'Reddit 监控',
-    stats: '概览', data: '数据', config: '配置', logout: '退出',
+    stats: '概览', data: '数据', reports: '报告', config: '配置', logout: '退出',
     password: '请输入密码', login: '登录', wrongPwd: '密码错误',
     loading: '加载中...',
     totalMentions: '总提及', unread: '未读', brand: '品牌', industry: '行业',
     competitor: '竞对', subreddit: 'Subreddit',
+    analyzed: '已分析', actionable: '可执行',
+    positive: '正面', negative: '负面', neutral: '中性',
     last30d: '近30天提及趋势', topSubs: '热门 Subreddit', recentPolls: '轮询日志',
+    sentimentDist: '情感分布',
     time: '时间', type: '类型', newItems: '新增', duration: '耗时', errors: '错误',
     mentions: '提及',
-    allCat: '全部分类', last24h: '近24小时', last7d: '近7天', last30dOpt: '近30天',
-    allTime: '全部时间', all: '全部', unreadOnly: '未读', readOnly: '已读',
+    last24h: '近24小时', last7d: '近7天', last30dOpt: '近30天',
+    allTime: '全部时间', all: '全部',
     search: '搜索...', filter: '筛选', markAllRead: '全部已读',
     totalResults: '共 {n} 条结果',
-    title_col: '标题', author: '作者', score: '评分', markRead: '已读',
+    title_col: '标题', author: '作者', score: '评分', sentiment: '情感',
+    aiSummary: 'AI 摘要', markRead: '已读',
     prevPage: '上一页', nextPage: '下一页', page: '第 {p} / {t} 页',
     proxySetting: '代理设置', enabled: '启用', host: '主机', port: '端口',
     username: '用户名', passwordField: '密码', protocol: '协议',
     unchangedHint: '(留空不修改)',
     pollSetting: '轮询设置', interval: '间隔（分钟）', webPwd: '登录密码',
+    aiSetting: 'AI 分析设置', aiEndpoint: 'API 地址', aiKey: 'API Key', aiModel: '模型',
     projects: '监控项目', addProject: '+ 添加项目', deleteProject: '删除',
     projectId: '项目ID', projectName: '项目名称',
     brandKw: '品牌关键词（每行一个）', industryKw: '行业关键词（每行一个）',
@@ -33,28 +38,36 @@ const i18n = {
     allMarkedRead: '已全部标为已读',
     post: '帖子', comment: '评论',
     comingSoon: '暂不可用',
+    noReports: '暂无报告，数据累积后将自动生成每日舆情报告',
+    reportDate: '日期', reportTotal: '总数', reportSentiment: '情感分布',
+    viewReport: '查看',
     langSwitch: 'EN',
   },
   en: {
     title: 'Reddit Monitor',
-    stats: 'Stats', data: 'Data', config: 'Config', logout: 'Logout',
+    stats: 'Stats', data: 'Data', reports: 'Reports', config: 'Config', logout: 'Logout',
     password: 'Password', login: 'Login', wrongPwd: 'Wrong password',
     loading: 'Loading...',
     totalMentions: 'Total Mentions', unread: 'Unread', brand: 'Brand', industry: 'Industry',
     competitor: 'Competitor', subreddit: 'Subreddit',
+    analyzed: 'Analyzed', actionable: 'Actionable',
+    positive: 'Positive', negative: 'Negative', neutral: 'Neutral',
     last30d: 'Mentions (Last 30 Days)', topSubs: 'Top Subreddits', recentPolls: 'Recent Polls',
+    sentimentDist: 'Sentiment Distribution',
     time: 'Time', type: 'Type', newItems: 'New', duration: 'Duration', errors: 'Errors',
     mentions: 'Mentions',
-    allCat: 'All Categories', last24h: 'Last 24h', last7d: 'Last 7d', last30dOpt: 'Last 30d',
-    allTime: 'All Time', all: 'All', unreadOnly: 'Unread', readOnly: 'Read',
+    last24h: 'Last 24h', last7d: 'Last 7d', last30dOpt: 'Last 30d',
+    allTime: 'All Time', all: 'All',
     search: 'Search...', filter: 'Filter', markAllRead: 'Mark All Read',
     totalResults: 'Total: {n} results',
-    title_col: 'Title', author: 'Author', score: 'Score', markRead: 'Read',
+    title_col: 'Title', author: 'Author', score: 'Score', sentiment: 'Sentiment',
+    aiSummary: 'AI Summary', markRead: 'Read',
     prevPage: 'Prev', nextPage: 'Next', page: 'Page {p} / {t}',
     proxySetting: 'Proxy Settings', enabled: 'Enabled', host: 'Host', port: 'Port',
     username: 'Username', passwordField: 'Password', protocol: 'Protocol',
     unchangedHint: '(unchanged if empty)',
     pollSetting: 'Poll Settings', interval: 'Interval (minutes)', webPwd: 'Web Password',
+    aiSetting: 'AI Analysis Settings', aiEndpoint: 'API Endpoint', aiKey: 'API Key', aiModel: 'Model',
     projects: 'Projects', addProject: '+ Add Project', deleteProject: 'Delete',
     projectId: 'ID', projectName: 'Name',
     brandKw: 'Brand Keywords (one per line)', industryKw: 'Industry Keywords (one per line)',
@@ -64,6 +77,9 @@ const i18n = {
     allMarkedRead: 'All marked as read',
     post: 'post', comment: 'comment',
     comingSoon: 'Coming soon',
+    noReports: 'No reports yet. Daily reports will be auto-generated once data accumulates.',
+    reportDate: 'Date', reportTotal: 'Total', reportSentiment: 'Sentiment',
+    viewReport: 'View',
     langSwitch: '中文',
   }
 };
@@ -74,6 +90,7 @@ function t(key) { return i18n[lang]?.[key] || i18n.en[key] || key; }
 function updateNav() {
   $('#nav-stats').textContent = t('stats');
   $('#nav-data').textContent = t('data');
+  $('#nav-reports').textContent = t('reports');
   $('#nav-config').textContent = t('config');
   $('#nav-logout').textContent = t('logout');
   $('#lang-btn').textContent = t('langSwitch');
@@ -91,7 +108,6 @@ async function api(path, opts = {}) {
   return res;
 }
 
-// --- Toast ---
 function toast(msg) {
   const el = document.createElement('div');
   el.className = 'toast';
@@ -108,10 +124,11 @@ function route() {
   });
   if (hash === 'stats') renderStats();
   else if (hash === 'data') renderData();
+  else if (hash === 'reports') renderReports();
   else if (hash === 'config') renderConfig();
+  else if (hash.startsWith('report/')) renderReportDetail(hash.slice(7));
 }
 
-// --- Auth check ---
 async function init() {
   try {
     const res = await fetch('/api/me');
@@ -128,18 +145,14 @@ function showLogin() {
       <div class="login-card">
         <h2>${t('title')}</h2>
         <div class="login-error" id="login-err"></div>
-        <input type="password" id="login-pwd" placeholder="${t('password')}" autofocus>
+        <input type="password" id="login-pwd" placeholder="${t('password')}" autocomplete="off" autofocus>
         <button id="login-btn">${t('login')}</button>
         <div style="margin-top:12px"><a href="#" id="login-lang" style="color:var(--text-muted);font-size:12px">${t('langSwitch')}</a></div>
       </div>
     </div>`;
   const submit = async () => {
     const pwd = $('#login-pwd').value;
-    const res = await fetch('/api/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: pwd }),
-    });
+    const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pwd }) });
     if (res.ok) { navbar.style.display = 'flex'; updateNav(); location.hash = '#stats'; route(); }
     else $('#login-err').textContent = t('wrongPwd');
   };
@@ -154,37 +167,37 @@ function toggleLang() {
   updateNav();
 }
 
-// --- Logout ---
-$('#nav-logout').onclick = async (e) => {
-  e.preventDefault();
-  await fetch('/api/logout', { method: 'POST' });
-  showLogin();
-};
+$('#nav-logout').onclick = async (e) => { e.preventDefault(); await fetch('/api/logout', { method: 'POST' }); showLogin(); };
+$('#lang-btn').onclick = (e) => { e.preventDefault(); toggleLang(); route(); };
 
-// --- Lang switch ---
-$('#lang-btn').onclick = (e) => {
-  e.preventDefault();
-  toggleLang();
-  route();
-};
+// --- Sentiment helpers ---
+function sentimentBadge(s) {
+  if (!s) return '<span class="badge" style="background:#ccc">-</span>';
+  const colors = { positive: '#4caf50', negative: '#e53935', neutral: '#ff9800' };
+  const labels = { positive: t('positive'), negative: t('negative'), neutral: t('neutral') };
+  return `<span class="badge" style="background:${colors[s] || '#ccc'}">${labels[s] || s}</span>`;
+}
 
 // --- Stats ---
 async function renderStats() {
   app.innerHTML = `<p>${t('loading')}</p>`;
-  const res = await api('/stats');
-  const d = await res.json();
+  const [statsRes, analysisRes] = await Promise.all([api('/stats'), api('/analysis-stats')]);
+  const d = await statsRes.json();
+  const a = await analysisRes.json();
 
   const catMap = {};
   d.byCategory.forEach(c => catMap[c.category] = c.count);
+  const sMap = {};
+  a.sentiments.forEach(s => sMap[s.sentiment] = s.count);
 
   const maxDay = Math.max(...d.byDay.map(r => r.count), 1);
 
   app.innerHTML = `
     <div class="stats-grid">
       <div class="stat-card"><div class="label">${t('totalMentions')}</div><div class="value">${d.total}</div></div>
-      <div class="stat-card"><div class="label">${t('unread')}</div><div class="value unread">${d.unread}</div></div>
-      <div class="stat-card"><div class="label">${t('brand')}</div><div class="value brand">${catMap.brand || 0}</div></div>
-      <div class="stat-card"><div class="label">${t('industry')}</div><div class="value">${catMap.industry || 0}</div></div>
+      <div class="stat-card"><div class="label">${t('analyzed')}</div><div class="value">${a.analyzed}</div></div>
+      <div class="stat-card"><div class="label">${t('positive')}</div><div class="value" style="color:#4caf50">${sMap.positive || 0}</div></div>
+      <div class="stat-card"><div class="label">${t('negative')}</div><div class="value" style="color:#e53935">${sMap.negative || 0}</div></div>
     </div>
 
     <div class="section">
@@ -217,27 +230,26 @@ async function renderStats() {
   const chart = $('#chart');
   d.byDay.forEach(r => {
     const pct = (r.count / maxDay * 100).toFixed(1);
-    const dayLabel = r.day.slice(5);
-    chart.innerHTML += `<div class="bar" style="height:${pct}%"><span class="bar-tip">${r.count}</span><span class="bar-label">${dayLabel}</span></div>`;
+    chart.innerHTML += `<div class="bar" style="height:${pct}%"><span class="bar-tip">${r.count}</span><span class="bar-label">${r.day.slice(5)}</span></div>`;
   });
 }
 
 // --- Data ---
-let dataState = { page: 1, category: '', timeRange: '7d', search: '', type: '' };
+let dataState = { page: 1, type: '', timeRange: '7d', search: '' };
 
 async function renderData() {
   app.innerHTML = `<p>${t('loading')}</p>`;
   const q = new URLSearchParams({ ...dataState, limit: 50 }).toString();
-  const res = await api('/mentions?' + q);
+  const res = await api('/mentions-analyzed?' + q);
   const d = await res.json();
-
-  const catLabel = (c) => t(c) || c;
 
   app.innerHTML = `
     <div class="section">
       <div class="filters">
-        <select id="f-cat" style="display:none">
-          <option value="">All</option>
+        <select id="f-type">
+          <option value="" ${dataState.type === '' ? 'selected' : ''}>${t('all')}</option>
+          <option value="post" ${dataState.type === 'post' ? 'selected' : ''}>${t('post')}</option>
+          <option value="comment" ${dataState.type === 'comment' ? 'selected' : ''}>${t('comment')}</option>
         </select>
         <select id="f-time">
           <option value="24h" ${dataState.timeRange === '24h' ? 'selected' : ''}>${t('last24h')}</option>
@@ -245,32 +257,25 @@ async function renderData() {
           <option value="30d" ${dataState.timeRange === '30d' ? 'selected' : ''}>${t('last30dOpt')}</option>
           <option value="" ${dataState.timeRange === '' ? 'selected' : ''}>${t('allTime')}</option>
         </select>
-        <select id="f-type">
-          <option value="" ${(dataState.type || '') === '' ? 'selected' : ''}>${t('all')}</option>
-          <option value="post" ${dataState.type === 'post' ? 'selected' : ''}>${t('post')}</option>
-          <option value="comment" ${dataState.type === 'comment' ? 'selected' : ''}>${t('comment')}</option>
-        </select>
-        <input type="text" id="f-search" placeholder="${t('search')}" value="${dataState.search}">
+        <input type="text" id="f-search" placeholder="${t('search')}" value="${dataState.search}" autocomplete="off">
         <button class="btn btn-outline btn-sm" id="f-apply">${t('filter')}</button>
         <div style="flex:1"></div>
         <div class="btn-group">
-          <button class="btn btn-outline btn-sm" id="mark-all-read">${t('markAllRead')}</button>
           <button class="btn btn-outline btn-sm" id="export-csv">CSV</button>
           <button class="btn btn-outline btn-sm" id="export-json">JSON</button>
         </div>
       </div>
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">${t('totalResults').replace('{n}', d.total)}</div>
       <table>
-        <thead><tr><th>${t('time')}</th><th>${t('type')}</th><th>${t('allCat').replace('全部', '')}</th><th>Subreddit</th><th>${t('title_col')}</th><th>${t('author')}</th><th>${t('score')}</th><th></th></tr></thead>
-        <tbody>${d.rows.map(r => `<tr class="${r.is_read ? '' : 'unread'}" data-id="${r.id}">
+        <thead><tr><th>${t('time')}</th><th>${t('type')}</th><th>${t('sentiment')}</th><th>Sub</th><th>${t('title_col')}</th><th>${t('aiSummary')}</th><th>${t('score')}</th></tr></thead>
+        <tbody>${d.rows.map(r => `<tr data-id="${r.id}">
           <td style="white-space:nowrap">${fmtUtc(r.created_utc)}</td>
           <td>${r.type === 'post' ? t('post') : t('comment')}</td>
-          <td><span class="badge ${r.category}">${catLabel(r.category)}</span></td>
+          <td>${sentimentBadge(r.sentiment)}</td>
           <td>r/${r.subreddit}</td>
           <td class="truncate"><a class="reddit-link" href="https://reddit.com${r.permalink}" target="_blank">${esc(r.title || r.body?.slice(0, 80) || '-')}</a></td>
-          <td>u/${r.author}</td>
+          <td class="truncate" style="max-width:200px;color:var(--text-light)">${esc(r.ai_summary || '-')}</td>
           <td>${r.score}</td>
-          <td>${r.is_read ? '' : `<button class="btn btn-sm btn-outline mark-read-btn">${t('markRead')}</button>`}</td>
         </tr>`).join('')}</tbody>
       </table>
       <div class="pagination">
@@ -281,9 +286,8 @@ async function renderData() {
     </div>`;
 
   $('#f-apply').onclick = () => {
-    dataState.category = $('#f-cat').value;
-    dataState.timeRange = $('#f-time').value;
     dataState.type = $('#f-type').value;
+    dataState.timeRange = $('#f-time').value;
     dataState.search = $('#f-search').value;
     dataState.page = 1;
     renderData();
@@ -292,23 +296,83 @@ async function renderData() {
   $('#prev-page').onclick = () => { dataState.page--; renderData(); };
   $('#next-page').onclick = () => { dataState.page++; renderData(); };
 
-  document.querySelectorAll('.mark-read-btn').forEach(btn => {
-    btn.onclick = async () => {
-      const id = btn.closest('tr').dataset.id;
-      await api('/mentions/read', { method: 'POST', body: { ids: [id] } });
-      renderData();
-    };
-  });
-
-  $('#mark-all-read').onclick = async () => {
-    await api('/mentions/read', { method: 'POST', body: { all: true, category: dataState.category || undefined } });
-    toast(t('allMarkedRead'));
-    renderData();
-  };
-
-  const exportParams = new URLSearchParams({ category: dataState.category, timeRange: dataState.timeRange, search: dataState.search }).toString();
+  const exportParams = new URLSearchParams({ type: dataState.type, timeRange: dataState.timeRange, search: dataState.search }).toString();
   $('#export-csv').onclick = () => { window.open('/api/mentions/export?' + exportParams + '&format=csv'); };
   $('#export-json').onclick = () => { window.open('/api/mentions/export?' + exportParams + '&format=json'); };
+}
+
+// --- Reports ---
+async function renderReports() {
+  app.innerHTML = `<p>${t('loading')}</p>`;
+  const res = await api('/reports');
+  const reports = await res.json();
+
+  if (!reports.length) {
+    app.innerHTML = `<div class="section"><p style="color:var(--text-muted)">${t('noReports')}</p></div>`;
+    return;
+  }
+
+  app.innerHTML = `
+    <div class="section">
+      <h3>${t('reports')}</h3>
+      <table>
+        <thead><tr><th>${t('reportDate')}</th><th>${t('reportTotal')}</th><th>${t('positive')}</th><th>${t('negative')}</th><th>${t('neutral')}</th><th>${t('actionable')}</th><th></th></tr></thead>
+        <tbody>${reports.map(r => `<tr>
+          <td>${r.report_date}</td>
+          <td>${r.total_count}</td>
+          <td style="color:#4caf50">${r.positive_count}</td>
+          <td style="color:#e53935">${r.negative_count}</td>
+          <td style="color:#ff9800">${r.neutral_count}</td>
+          <td>${r.actionable_count}</td>
+          <td><a href="#report/${r.report_date}?p=${r.project}" class="btn btn-sm btn-outline">${t('viewReport')}</a></td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>`;
+}
+
+async function renderReportDetail(dateAndParams) {
+  app.innerHTML = `<p>${t('loading')}</p>`;
+  const [date] = dateAndParams.split('?');
+  const params = new URLSearchParams(dateAndParams.split('?')[1] || '');
+  const project = params.get('p') || '';
+
+  const res = await api(`/reports/${date}?project=${project}`);
+  if (!res.ok) { app.innerHTML = `<div class="section"><p>Report not found</p></div>`; return; }
+  const r = await res.json();
+
+  let topPros = [], topCons = [];
+  try { topPros = JSON.parse(r.top_pros || '[]'); } catch {}
+  try { topCons = JSON.parse(r.top_cons || '[]'); } catch {}
+
+  app.innerHTML = `
+    <div style="margin-bottom:16px">
+      <a href="#reports" class="btn btn-outline btn-sm">&larr; ${t('reports')}</a>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card"><div class="label">${t('reportTotal')}</div><div class="value">${r.total_count}</div></div>
+      <div class="stat-card"><div class="label">${t('positive')}</div><div class="value" style="color:#4caf50">${r.positive_count}</div></div>
+      <div class="stat-card"><div class="label">${t('negative')}</div><div class="value" style="color:#e53935">${r.negative_count}</div></div>
+      <div class="stat-card"><div class="label">${t('actionable')}</div><div class="value" style="color:#2196f3">${r.actionable_count}</div></div>
+    </div>
+    ${topPros.length ? `<div class="section"><h3>${t('positive')}</h3><ul>${topPros.map(p => `<li>${esc(p.text)} <span style="color:var(--text-muted)">(${p.count})</span></li>`).join('')}</ul></div>` : ''}
+    ${topCons.length ? `<div class="section"><h3>${t('negative')}</h3><ul>${topCons.map(c => `<li>${esc(c.text)} <span style="color:var(--text-muted)">(${c.count})</span></li>`).join('')}</ul></div>` : ''}
+    <div class="section">
+      <div class="report-content">${markdownToHtml(r.full_report || '')}</div>
+    </div>`;
+}
+
+// Simple markdown renderer
+function markdownToHtml(md) {
+  return md
+    .replace(/^### (.+)$/gm, '<h4>$1</h4>')
+    .replace(/^## (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^# (.+)$/gm, '<h2>$1</h2>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/^\- (.+)$/gm, '<li>$1</li>')
+    .replace(/^(\d+)\. (.+)$/gm, '<li>$2</li>')
+    .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
+    .replace(/\n\n/g, '<br><br>')
+    .replace(/\n/g, '<br>');
 }
 
 // --- Config ---
@@ -318,6 +382,24 @@ async function renderConfig() {
   const cfg = await res.json();
 
   app.innerHTML = `
+    <div class="section">
+      <h3>${t('aiSetting')}</h3>
+      <div class="form-row">
+        <div class="form-group">
+          <label>${t('aiEndpoint')}</label>
+          <input id="c-ai-endpoint" value="${cfg.ai?.endpoint || ''}" autocomplete="off" placeholder="https://api.example.com/v1/messages">
+        </div>
+        <div class="form-group">
+          <label>${t('aiKey')}</label>
+          <input id="c-ai-key" type="password" value="" autocomplete="new-password" placeholder="${t('unchangedHint')}">
+        </div>
+        <div class="form-group">
+          <label>${t('aiModel')}</label>
+          <input id="c-ai-model" value="${cfg.ai?.model || 'claude-sonnet-4-20250514'}" autocomplete="off">
+        </div>
+      </div>
+    </div>
+
     <div class="section">
       <h3>${t('proxySetting')}</h3>
       <div class="form-row">
@@ -330,23 +412,23 @@ async function renderConfig() {
         </div>
         <div class="form-group">
           <label>${t('host')}</label>
-          <input id="c-proxy-host" value="${cfg.proxy?.host || ''}">
+          <input id="c-proxy-host" value="${cfg.proxy?.host || ''}" autocomplete="off">
         </div>
         <div class="form-group">
           <label>${t('port')}</label>
-          <input id="c-proxy-port" type="number" value="${cfg.proxy?.port || ''}">
+          <input id="c-proxy-port" type="number" value="${cfg.proxy?.port || ''}" autocomplete="off">
         </div>
         <div class="form-group">
           <label>${t('username')}</label>
-          <input id="c-proxy-user" value="${cfg.proxy?.username || ''}">
+          <input id="c-proxy-user" value="${cfg.proxy?.username || ''}" autocomplete="off">
         </div>
         <div class="form-group">
           <label>${t('passwordField')}</label>
-          <input id="c-proxy-pass" type="password" value="" placeholder="${t('unchangedHint')}">
+          <input id="c-proxy-pass" type="password" value="" autocomplete="new-password" placeholder="${t('unchangedHint')}">
         </div>
         <div class="form-group">
           <label>${t('protocol')}</label>
-          <input id="c-proxy-proto" value="${cfg.proxy?.protocol || 'http'}">
+          <input id="c-proxy-proto" value="${cfg.proxy?.protocol || 'http'}" autocomplete="off">
         </div>
       </div>
     </div>
@@ -355,11 +437,11 @@ async function renderConfig() {
       <h3>${t('pollSetting')}</h3>
       <div class="form-group">
         <label>${t('interval')}</label>
-        <input id="c-interval" type="number" value="${cfg.pollIntervalMinutes || 8}" style="width:120px">
+        <input id="c-interval" type="number" value="${cfg.pollIntervalMinutes || 8}" style="width:120px" autocomplete="off">
       </div>
       <div class="form-group">
         <label>${t('webPwd')}</label>
-        <input id="c-webpwd" type="password" value="" placeholder="${t('unchangedHint')}">
+        <input id="c-webpwd" type="password" value="" autocomplete="new-password" placeholder="${t('unchangedHint')}">
       </div>
     </div>
 
@@ -386,8 +468,8 @@ async function renderConfig() {
           </div>
         </div>
         <div class="form-row">
-          <div class="form-group"><label>${t('projectId')}</label><input class="p-id" value="${esc(p.id || '')}"></div>
-          <div class="form-group"><label>${t('projectName')}</label><input class="p-name" value="${esc(p.name || '')}"></div>
+          <div class="form-group"><label>${t('projectId')}</label><input class="p-id" value="${esc(p.id || '')}" autocomplete="off"></div>
+          <div class="form-group"><label>${t('projectName')}</label><input class="p-name" value="${esc(p.name || '')}" autocomplete="off"></div>
         </div>
         <div class="form-group"><label>${t('subreddits')}</label><textarea class="p-subs">${(p.subreddits || []).join('\n')}</textarea></div>
         <div class="form-group"><label>${t('brandKw')} <span style="color:var(--text-muted);font-size:11px">— ${t('comingSoon')}</span></label><textarea class="p-brand" disabled style="opacity:.5;cursor:not-allowed">${(p.keywords?.brand || []).join('\n')}</textarea></div>
@@ -396,10 +478,7 @@ async function renderConfig() {
       </div>`).join('');
 
     document.querySelectorAll('.del-project').forEach(btn => {
-      btn.onclick = () => {
-        projects.splice(+btn.closest('.project-card').dataset.idx, 1);
-        renderProjects(projects);
-      };
+      btn.onclick = () => { projects.splice(+btn.closest('.project-card').dataset.idx, 1); renderProjects(projects); };
     });
   }
 
@@ -436,10 +515,17 @@ async function renderConfig() {
         username: $('#c-proxy-user').value,
         protocol: $('#c-proxy-proto').value || 'http',
       },
+      ai: {
+        endpoint: $('#c-ai-endpoint').value.trim(),
+        model: $('#c-ai-model').value.trim(),
+      },
     };
 
-    const pwd = $('#c-proxy-pass').value;
-    if (pwd) update.proxy.password = pwd;
+    const proxyPwd = $('#c-proxy-pass').value;
+    if (proxyPwd) update.proxy.password = proxyPwd;
+
+    const aiKey = $('#c-ai-key').value;
+    if (aiKey) update.ai.apiKey = aiKey;
 
     const webpwd = $('#c-webpwd').value;
     if (webpwd) update.webPassword = webpwd;

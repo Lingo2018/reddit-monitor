@@ -25,5 +25,10 @@
   ],
   "pollIntervalMinutes": 15,
   "webPort": 3000,
-  "webPassword": "admin"
+  "webPassword": "admin",
+  "ai": {
+    "endpoint": "https://api.anthropic.com/v1/messages",
+    "apiKey": "",
+    "model": "claude-sonnet-4-20250514"
+  }
 }

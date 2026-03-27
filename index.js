@@ -1,9 +1,11 @@
 import { loadConfig } from './config.js';
 import { createFetcher, createKookeeyFetcher } from './fetcher.js';
-import { saveMentions, logPoll, logCommentRate } from './db.js';
+import { saveMentions, logPoll, logCommentRate, getUnanalyzedMentions, saveAnalysisBatch, getDailyAnalysisStats, saveDailyReport } from './db.js';
+import { analyzeBatch, generateDailyReport } from './analyzer.js';
 import app from './server.js';
 
 let roundCount = 0;
+let lastReportDate = '';
 
 function log(msg) {
   console.log(`[${new Date().toISOString()}] ${msg}`);
@@ -53,6 +55,59 @@ async function runProject(project, fetcher) {
   return { tasks, errors, newCount, totalItems: allMentions.length };
 }
 
+async function runAnalysis(config) {
+  if (!config.ai?.apiKey || !config.ai?.endpoint) return;
+
+  for (const project of config.projects) {
+    const unanalyzed = getUnanalyzedMentions(project.id, 20);
+    if (!unanalyzed.length) { log(`  [${project.id}] 无待分析内容`); continue; }
+
+    log(`  [${project.id}] AI 分析 ${unanalyzed.length} 条...`);
+    const results = await analyzeBatch(config.ai, unanalyzed);
+    if (results.length) {
+      saveAnalysisBatch(results);
+      const sentiments = results.map(r => r.sentiment);
+      log(`  [${project.id}] 分析完成: ${results.length} 条 (正${sentiments.filter(s => s === 'positive').length}/负${sentiments.filter(s => s === 'negative').length}/中${sentiments.filter(s => s === 'neutral').length})`);
+    }
+  }
+}
+
+async function checkDailyReport(config) {
+  if (!config.ai?.apiKey || !config.ai?.endpoint) return;
+
+  const today = new Date().toISOString().slice(0, 10);
+  // Generate report for yesterday (full day data)
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+
+  if (lastReportDate === yesterday) return;
+
+  for (const project of config.projects) {
+    const stats = getDailyAnalysisStats(project.id, yesterday);
+    if (stats.total === 0) { log(`  [${project.id}] ${yesterday} 无数据，跳过报告`); continue; }
+
+    log(`  [${project.id}] 生成 ${yesterday} 舆情日报...`);
+    const report = await generateDailyReport(config.ai, project, stats);
+    if (report) {
+      saveDailyReport({
+        project: project.id,
+        report_date: yesterday,
+        positive_count: stats.positive,
+        negative_count: stats.negative,
+        neutral_count: stats.neutral,
+        total_count: stats.total,
+        actionable_count: stats.actionable,
+        top_pros: JSON.stringify(stats.topPros),
+        top_cons: JSON.stringify(stats.topCons),
+        full_report: report,
+        created_at: new Date().toISOString(),
+      });
+      log(`  [${project.id}] ${yesterday} 日报已生成`);
+    }
+  }
+
+  lastReportDate = yesterday;
+}
+
 async function runPoll() {
   const config = loadConfig();
   if (!config.projects.length) { log('无启用的项目，跳过'); return; }
@@ -78,6 +133,12 @@ async function runPoll() {
   logPoll({ poll_time: new Date().toISOString(), round_type: 'all', tasks_run: JSON.stringify(allTasks), new_items: totalNew, errors: allErrors.length ? JSON.stringify(allErrors) : null, duration_ms: durationMs });
 
   log(`=== 第 ${roundCount} 轮完成: ${totalNew} 新数据 / ${(durationMs / 1000).toFixed(1)}s ===`);
+
+  // AI analysis
+  try { await runAnalysis(config); } catch (err) { log(`AI 分析异常: ${err.message}`); }
+
+  // Daily report check
+  try { await checkDailyReport(config); } catch (err) { log(`日报异常: ${err.message}`); }
 }
 
 async function loop() {
@@ -100,4 +161,5 @@ const initConfig = loadConfig();
 const webPort = initConfig.webPort || 3000;
 app.listen(webPort, () => log(`Web UI: http://localhost:${webPort}`));
 log(`项目: ${initConfig.projects.map(p => p.id).join(', ') || '无'}`);
+log(`AI 分析: ${initConfig.ai?.apiKey ? '已配置' : '未配置'}`);
 loop();
