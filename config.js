@@ -32,9 +32,11 @@ export function loadConfig() {
     webPassword: cfg.webPassword || 'admin',
     proxy: {
       evomi: evomiUrl,
-      local: cfg.kookeey?.localProxy
-        ? `http://${cfg.kookeey.localProxy.host}:${cfg.kookeey.localProxy.port}`
-        : 'http://127.0.0.1:10809',
+      local: p.enabled
+        ? (cfg.kookeey?.localProxy
+            ? `http://${cfg.kookeey.localProxy.host}:${cfg.kookeey.localProxy.port}`
+            : 'http://127.0.0.1:10809')
+        : null,
     },
     kookeey: cfg.kookeey || null,
   };
