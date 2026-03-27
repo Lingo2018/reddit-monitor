@@ -161,7 +161,7 @@ export function getUnanalyzedMentions(project, limit = 20) {
   return db.prepare(`
     SELECT m.* FROM mentions m
     LEFT JOIN analysis a ON m.id = a.mention_id AND m.project = a.project
-    WHERE m.project = ? AND a.mention_id IS NULL AND (m.body IS NOT NULL AND m.body != '')
+    WHERE m.project = ? AND a.mention_id IS NULL AND ((m.body IS NOT NULL AND m.body != '') OR (m.title IS NOT NULL AND m.title != ''))
     ORDER BY m.discovered_at DESC LIMIT ?
   `).all(project, limit);
 }
