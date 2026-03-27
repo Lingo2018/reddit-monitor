@@ -2,6 +2,82 @@ const $ = s => document.querySelector(s);
 const app = $('#app');
 const navbar = $('#navbar');
 
+// --- i18n ---
+const i18n = {
+  zh: {
+    title: 'Reddit 监控',
+    stats: '概览', data: '数据', config: '配置', logout: '退出',
+    password: '请输入密码', login: '登录', wrongPwd: '密码错误',
+    loading: '加载中...',
+    totalMentions: '总提及', unread: '未读', brand: '品牌', industry: '行业',
+    competitor: '竞对', subreddit: 'Subreddit',
+    last30d: '近30天提及趋势', topSubs: '热门 Subreddit', recentPolls: '轮询日志',
+    time: '时间', type: '类型', newItems: '新增', duration: '耗时', errors: '错误',
+    mentions: '提及',
+    allCat: '全部分类', last24h: '近24小时', last7d: '近7天', last30dOpt: '近30天',
+    allTime: '全部时间', all: '全部', unreadOnly: '未读', readOnly: '已读',
+    search: '搜索...', filter: '筛选', markAllRead: '全部已读',
+    totalResults: '共 {n} 条结果',
+    title_col: '标题', author: '作者', score: '评分', markRead: '已读',
+    prevPage: '上一页', nextPage: '下一页', page: '第 {p} / {t} 页',
+    proxySetting: '代理设置', enabled: '启用', host: '主机', port: '端口',
+    username: '用户名', passwordField: '密码', protocol: '协议',
+    unchangedHint: '(留空不修改)',
+    pollSetting: '轮询设置', interval: '间隔（分钟）', webPwd: '登录密码',
+    projects: '监控项目', addProject: '+ 添加项目', deleteProject: '删除',
+    projectId: '项目ID', projectName: '项目名称',
+    brandKw: '品牌关键词（每行一个）', industryKw: '行业关键词（每行一个）',
+    competitorKw: '竞对关键词（每行一个）', subreddits: '监控 Subreddit（每行一个）',
+    saveConfig: '保存配置', configSaved: '配置已保存，下轮轮询生效',
+    saveFailed: '保存失败：',
+    allMarkedRead: '已全部标为已读',
+    post: '帖子', comment: '评论',
+    langSwitch: 'EN',
+  },
+  en: {
+    title: 'Reddit Monitor',
+    stats: 'Stats', data: 'Data', config: 'Config', logout: 'Logout',
+    password: 'Password', login: 'Login', wrongPwd: 'Wrong password',
+    loading: 'Loading...',
+    totalMentions: 'Total Mentions', unread: 'Unread', brand: 'Brand', industry: 'Industry',
+    competitor: 'Competitor', subreddit: 'Subreddit',
+    last30d: 'Mentions (Last 30 Days)', topSubs: 'Top Subreddits', recentPolls: 'Recent Polls',
+    time: 'Time', type: 'Type', newItems: 'New', duration: 'Duration', errors: 'Errors',
+    mentions: 'Mentions',
+    allCat: 'All Categories', last24h: 'Last 24h', last7d: 'Last 7d', last30dOpt: 'Last 30d',
+    allTime: 'All Time', all: 'All', unreadOnly: 'Unread', readOnly: 'Read',
+    search: 'Search...', filter: 'Filter', markAllRead: 'Mark All Read',
+    totalResults: 'Total: {n} results',
+    title_col: 'Title', author: 'Author', score: 'Score', markRead: 'Read',
+    prevPage: 'Prev', nextPage: 'Next', page: 'Page {p} / {t}',
+    proxySetting: 'Proxy Settings', enabled: 'Enabled', host: 'Host', port: 'Port',
+    username: 'Username', passwordField: 'Password', protocol: 'Protocol',
+    unchangedHint: '(unchanged if empty)',
+    pollSetting: 'Poll Settings', interval: 'Interval (minutes)', webPwd: 'Web Password',
+    projects: 'Projects', addProject: '+ Add Project', deleteProject: 'Delete',
+    projectId: 'ID', projectName: 'Name',
+    brandKw: 'Brand Keywords (one per line)', industryKw: 'Industry Keywords (one per line)',
+    competitorKw: 'Competitor Keywords (one per line)', subreddits: 'Subreddits (one per line)',
+    saveConfig: 'Save Config', configSaved: 'Config saved! Changes apply on next poll cycle.',
+    saveFailed: 'Save failed: ',
+    allMarkedRead: 'All marked as read',
+    post: 'post', comment: 'comment',
+    langSwitch: '中文',
+  }
+};
+
+let lang = localStorage.getItem('rm-lang') || 'zh';
+function t(key) { return i18n[lang]?.[key] || i18n.en[key] || key; }
+
+function updateNav() {
+  $('#nav-stats').textContent = t('stats');
+  $('#nav-data').textContent = t('data');
+  $('#nav-config').textContent = t('config');
+  $('#nav-logout').textContent = t('logout');
+  $('#lang-btn').textContent = t('langSwitch');
+  $('.nav-brand').textContent = t('title');
+}
+
 // --- API helper ---
 async function api(path, opts = {}) {
   const res = await fetch('/api' + path, {
@@ -37,7 +113,7 @@ function route() {
 async function init() {
   try {
     const res = await fetch('/api/me');
-    if (res.ok) { navbar.style.display = 'flex'; route(); }
+    if (res.ok) { navbar.style.display = 'flex'; updateNav(); route(); }
     else showLogin();
   } catch { showLogin(); }
 }
@@ -48,10 +124,11 @@ function showLogin() {
   app.innerHTML = `
     <div class="login-wrap">
       <div class="login-card">
-        <h2>Reddit Monitor</h2>
+        <h2>${t('title')}</h2>
         <div class="login-error" id="login-err"></div>
-        <input type="password" id="login-pwd" placeholder="Password" autofocus>
-        <button id="login-btn">Login</button>
+        <input type="password" id="login-pwd" placeholder="${t('password')}" autofocus>
+        <button id="login-btn">${t('login')}</button>
+        <div style="margin-top:12px"><a href="#" id="login-lang" style="color:var(--text-muted);font-size:12px">${t('langSwitch')}</a></div>
       </div>
     </div>`;
   const submit = async () => {
@@ -61,23 +138,37 @@ function showLogin() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password: pwd }),
     });
-    if (res.ok) { navbar.style.display = 'flex'; location.hash = '#stats'; route(); }
-    else $('#login-err').textContent = 'Wrong password';
+    if (res.ok) { navbar.style.display = 'flex'; updateNav(); location.hash = '#stats'; route(); }
+    else $('#login-err').textContent = t('wrongPwd');
   };
   $('#login-btn').onclick = submit;
   $('#login-pwd').onkeydown = e => { if (e.key === 'Enter') submit(); };
+  $('#login-lang').onclick = (e) => { e.preventDefault(); toggleLang(); showLogin(); };
+}
+
+function toggleLang() {
+  lang = lang === 'zh' ? 'en' : 'zh';
+  localStorage.setItem('rm-lang', lang);
+  updateNav();
 }
 
 // --- Logout ---
-$('#logout-btn').onclick = async (e) => {
+$('#nav-logout').onclick = async (e) => {
   e.preventDefault();
   await fetch('/api/logout', { method: 'POST' });
   showLogin();
 };
 
+// --- Lang switch ---
+$('#lang-btn').onclick = (e) => {
+  e.preventDefault();
+  toggleLang();
+  route();
+};
+
 // --- Stats ---
 async function renderStats() {
-  app.innerHTML = '<p>Loading...</p>';
+  app.innerHTML = `<p>${t('loading')}</p>`;
   const res = await api('/stats');
   const d = await res.json();
 
@@ -88,29 +179,29 @@ async function renderStats() {
 
   app.innerHTML = `
     <div class="stats-grid">
-      <div class="stat-card"><div class="label">Total Mentions</div><div class="value">${d.total}</div></div>
-      <div class="stat-card"><div class="label">Unread</div><div class="value unread">${d.unread}</div></div>
-      <div class="stat-card"><div class="label">Brand</div><div class="value brand">${catMap.brand || 0}</div></div>
-      <div class="stat-card"><div class="label">Industry</div><div class="value">${catMap.industry || 0}</div></div>
+      <div class="stat-card"><div class="label">${t('totalMentions')}</div><div class="value">${d.total}</div></div>
+      <div class="stat-card"><div class="label">${t('unread')}</div><div class="value unread">${d.unread}</div></div>
+      <div class="stat-card"><div class="label">${t('brand')}</div><div class="value brand">${catMap.brand || 0}</div></div>
+      <div class="stat-card"><div class="label">${t('industry')}</div><div class="value">${catMap.industry || 0}</div></div>
     </div>
 
     <div class="section">
-      <h3>Mentions (Last 30 Days)</h3>
+      <h3>${t('last30d')}</h3>
       <div class="bar-chart" id="chart"></div>
     </div>
 
     <div class="section">
-      <h3>Top Subreddits</h3>
+      <h3>${t('topSubs')}</h3>
       <table>
-        <thead><tr><th>Subreddit</th><th>Mentions</th></tr></thead>
+        <thead><tr><th>Subreddit</th><th>${t('mentions')}</th></tr></thead>
         <tbody>${d.topSubs.map(s => `<tr><td>r/${s.subreddit}</td><td>${s.count}</td></tr>`).join('')}</tbody>
       </table>
     </div>
 
     <div class="section">
-      <h3>Recent Polls</h3>
+      <h3>${t('recentPolls')}</h3>
       <table>
-        <thead><tr><th>Time</th><th>Type</th><th>New</th><th>Duration</th><th>Errors</th></tr></thead>
+        <thead><tr><th>${t('time')}</th><th>${t('type')}</th><th>${t('newItems')}</th><th>${t('duration')}</th><th>${t('errors')}</th></tr></thead>
         <tbody>${d.recentPolls.map(p => `<tr>
           <td>${fmtTime(p.poll_time)}</td>
           <td>${p.round_type}</td>
@@ -121,11 +212,10 @@ async function renderStats() {
       </table>
     </div>`;
 
-  // Render bars
   const chart = $('#chart');
   d.byDay.forEach(r => {
     const pct = (r.count / maxDay * 100).toFixed(1);
-    const dayLabel = r.day.slice(5); // MM-DD
+    const dayLabel = r.day.slice(5);
     chart.innerHTML += `<div class="bar" style="height:${pct}%"><span class="bar-tip">${r.count}</span><span class="bar-label">${dayLabel}</span></div>`;
   });
 }
@@ -134,63 +224,64 @@ async function renderStats() {
 let dataState = { page: 1, category: '', timeRange: '7d', search: '', is_read: '' };
 
 async function renderData() {
-  app.innerHTML = '<p>Loading...</p>';
+  app.innerHTML = `<p>${t('loading')}</p>`;
   const q = new URLSearchParams({ ...dataState, limit: 50 }).toString();
   const res = await api('/mentions?' + q);
   const d = await res.json();
+
+  const catLabel = (c) => t(c) || c;
 
   app.innerHTML = `
     <div class="section">
       <div class="filters">
         <select id="f-cat">
-          <option value="">All Categories</option>
-          <option value="brand" ${dataState.category === 'brand' ? 'selected' : ''}>Brand</option>
-          <option value="industry" ${dataState.category === 'industry' ? 'selected' : ''}>Industry</option>
-          <option value="competitor" ${dataState.category === 'competitor' ? 'selected' : ''}>Competitor</option>
-          <option value="subreddit" ${dataState.category === 'subreddit' ? 'selected' : ''}>Subreddit</option>
+          <option value="">${t('allCat')}</option>
+          <option value="brand" ${dataState.category === 'brand' ? 'selected' : ''}>${t('brand')}</option>
+          <option value="industry" ${dataState.category === 'industry' ? 'selected' : ''}>${t('industry')}</option>
+          <option value="competitor" ${dataState.category === 'competitor' ? 'selected' : ''}>${t('competitor')}</option>
+          <option value="subreddit" ${dataState.category === 'subreddit' ? 'selected' : ''}>${t('subreddit')}</option>
         </select>
         <select id="f-time">
-          <option value="24h" ${dataState.timeRange === '24h' ? 'selected' : ''}>Last 24h</option>
-          <option value="7d" ${dataState.timeRange === '7d' ? 'selected' : ''}>Last 7d</option>
-          <option value="30d" ${dataState.timeRange === '30d' ? 'selected' : ''}>Last 30d</option>
-          <option value="" ${dataState.timeRange === '' ? 'selected' : ''}>All Time</option>
+          <option value="24h" ${dataState.timeRange === '24h' ? 'selected' : ''}>${t('last24h')}</option>
+          <option value="7d" ${dataState.timeRange === '7d' ? 'selected' : ''}>${t('last7d')}</option>
+          <option value="30d" ${dataState.timeRange === '30d' ? 'selected' : ''}>${t('last30dOpt')}</option>
+          <option value="" ${dataState.timeRange === '' ? 'selected' : ''}>${t('allTime')}</option>
         </select>
         <select id="f-read">
-          <option value="" ${dataState.is_read === '' ? 'selected' : ''}>All</option>
-          <option value="0" ${dataState.is_read === '0' ? 'selected' : ''}>Unread</option>
-          <option value="1" ${dataState.is_read === '1' ? 'selected' : ''}>Read</option>
+          <option value="" ${dataState.is_read === '' ? 'selected' : ''}>${t('all')}</option>
+          <option value="0" ${dataState.is_read === '0' ? 'selected' : ''}>${t('unreadOnly')}</option>
+          <option value="1" ${dataState.is_read === '1' ? 'selected' : ''}>${t('readOnly')}</option>
         </select>
-        <input type="text" id="f-search" placeholder="Search..." value="${dataState.search}">
-        <button class="btn btn-outline btn-sm" id="f-apply">Filter</button>
+        <input type="text" id="f-search" placeholder="${t('search')}" value="${dataState.search}">
+        <button class="btn btn-outline btn-sm" id="f-apply">${t('filter')}</button>
         <div style="flex:1"></div>
         <div class="btn-group">
-          <button class="btn btn-outline btn-sm" id="mark-all-read">Mark All Read</button>
+          <button class="btn btn-outline btn-sm" id="mark-all-read">${t('markAllRead')}</button>
           <button class="btn btn-outline btn-sm" id="export-csv">CSV</button>
           <button class="btn btn-outline btn-sm" id="export-json">JSON</button>
         </div>
       </div>
-      <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Total: ${d.total} results</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">${t('totalResults').replace('{n}', d.total)}</div>
       <table>
-        <thead><tr><th>Time</th><th>Type</th><th>Category</th><th>Subreddit</th><th>Title</th><th>Author</th><th>Score</th><th></th></tr></thead>
+        <thead><tr><th>${t('time')}</th><th>${t('type')}</th><th>${t('allCat').replace('全部', '')}</th><th>Subreddit</th><th>${t('title_col')}</th><th>${t('author')}</th><th>${t('score')}</th><th></th></tr></thead>
         <tbody>${d.rows.map(r => `<tr class="${r.is_read ? '' : 'unread'}" data-id="${r.id}">
           <td style="white-space:nowrap">${fmtTime(r.discovered_at)}</td>
-          <td>${r.type}</td>
-          <td><span class="badge ${r.category}">${r.category}</span></td>
+          <td>${r.type === 'post' ? t('post') : t('comment')}</td>
+          <td><span class="badge ${r.category}">${catLabel(r.category)}</span></td>
           <td>r/${r.subreddit}</td>
           <td class="truncate"><a class="reddit-link" href="https://reddit.com${r.permalink}" target="_blank">${esc(r.title || r.body?.slice(0, 80) || '-')}</a></td>
           <td>u/${r.author}</td>
           <td>${r.score}</td>
-          <td>${r.is_read ? '' : '<button class="btn btn-sm btn-outline mark-read-btn">Read</button>'}</td>
+          <td>${r.is_read ? '' : `<button class="btn btn-sm btn-outline mark-read-btn">${t('markRead')}</button>`}</td>
         </tr>`).join('')}</tbody>
       </table>
       <div class="pagination">
-        <button class="btn btn-outline btn-sm" id="prev-page" ${d.page <= 1 ? 'disabled' : ''}>Prev</button>
-        <span>Page ${d.page} / ${d.pages || 1}</span>
-        <button class="btn btn-outline btn-sm" id="next-page" ${d.page >= d.pages ? 'disabled' : ''}>Next</button>
+        <button class="btn btn-outline btn-sm" id="prev-page" ${d.page <= 1 ? 'disabled' : ''}>${t('prevPage')}</button>
+        <span>${t('page').replace('{p}', d.page).replace('{t}', d.pages || 1)}</span>
+        <button class="btn btn-outline btn-sm" id="next-page" ${d.page >= d.pages ? 'disabled' : ''}>${t('nextPage')}</button>
       </div>
     </div>`;
 
-  // Event listeners
   $('#f-apply').onclick = () => {
     dataState.category = $('#f-cat').value;
     dataState.timeRange = $('#f-time').value;
@@ -213,7 +304,7 @@ async function renderData() {
 
   $('#mark-all-read').onclick = async () => {
     await api('/mentions/read', { method: 'POST', body: { all: true, category: dataState.category || undefined } });
-    toast('All marked as read');
+    toast(t('allMarkedRead'));
     renderData();
   };
 
@@ -224,64 +315,64 @@ async function renderData() {
 
 // --- Config ---
 async function renderConfig() {
-  app.innerHTML = '<p>Loading...</p>';
+  app.innerHTML = `<p>${t('loading')}</p>`;
   const res = await api('/config');
   const cfg = await res.json();
 
   app.innerHTML = `
     <div class="section">
-      <h3>Proxy Settings</h3>
+      <h3>${t('proxySetting')}</h3>
       <div class="form-row">
         <div class="form-group">
-          <label>Enabled</label>
+          <label>${t('enabled')}</label>
           <select id="c-proxy-enabled">
             <option value="true" ${cfg.proxy?.enabled ? 'selected' : ''}>Yes</option>
             <option value="false" ${!cfg.proxy?.enabled ? 'selected' : ''}>No</option>
           </select>
         </div>
         <div class="form-group">
-          <label>Host</label>
+          <label>${t('host')}</label>
           <input id="c-proxy-host" value="${cfg.proxy?.host || ''}">
         </div>
         <div class="form-group">
-          <label>Port</label>
+          <label>${t('port')}</label>
           <input id="c-proxy-port" type="number" value="${cfg.proxy?.port || ''}">
         </div>
         <div class="form-group">
-          <label>Username</label>
+          <label>${t('username')}</label>
           <input id="c-proxy-user" value="${cfg.proxy?.username || ''}">
         </div>
         <div class="form-group">
-          <label>Password</label>
-          <input id="c-proxy-pass" type="password" value="" placeholder="(unchanged if empty)">
+          <label>${t('passwordField')}</label>
+          <input id="c-proxy-pass" type="password" value="" placeholder="${t('unchangedHint')}">
         </div>
         <div class="form-group">
-          <label>Protocol</label>
+          <label>${t('protocol')}</label>
           <input id="c-proxy-proto" value="${cfg.proxy?.protocol || 'http'}">
         </div>
       </div>
     </div>
 
     <div class="section">
-      <h3>Poll Settings</h3>
+      <h3>${t('pollSetting')}</h3>
       <div class="form-group">
-        <label>Interval (minutes)</label>
+        <label>${t('interval')}</label>
         <input id="c-interval" type="number" value="${cfg.pollIntervalMinutes || 8}" style="width:120px">
       </div>
       <div class="form-group">
-        <label>Web Password</label>
-        <input id="c-webpwd" type="password" value="" placeholder="(unchanged if empty)">
+        <label>${t('webPwd')}</label>
+        <input id="c-webpwd" type="password" value="" placeholder="${t('unchangedHint')}">
       </div>
     </div>
 
     <div class="section">
-      <h3>Projects</h3>
+      <h3>${t('projects')}</h3>
       <div id="projects-list"></div>
-      <button class="btn btn-outline" id="add-project" style="margin-top:10px">+ Add Project</button>
+      <button class="btn btn-outline" id="add-project" style="margin-top:10px">${t('addProject')}</button>
     </div>
 
     <div style="margin-top:16px">
-      <button class="btn btn-primary" id="save-config">Save Config</button>
+      <button class="btn btn-primary" id="save-config">${t('saveConfig')}</button>
     </div>`;
 
   const projectsList = $('#projects-list');
@@ -292,18 +383,18 @@ async function renderConfig() {
         <div class="project-header">
           <h4>${esc(p.name || p.id || 'Project ' + (i + 1))}</h4>
           <div class="btn-group">
-            <label style="font-size:12px"><input type="checkbox" class="p-enabled" ${p.enabled !== false ? 'checked' : ''}> Enabled</label>
-            <button class="btn btn-outline btn-sm del-project">Delete</button>
+            <label style="font-size:12px"><input type="checkbox" class="p-enabled" ${p.enabled !== false ? 'checked' : ''}> ${t('enabled')}</label>
+            <button class="btn btn-outline btn-sm del-project">${t('deleteProject')}</button>
           </div>
         </div>
         <div class="form-row">
-          <div class="form-group"><label>ID</label><input class="p-id" value="${esc(p.id || '')}"></div>
-          <div class="form-group"><label>Name</label><input class="p-name" value="${esc(p.name || '')}"></div>
+          <div class="form-group"><label>${t('projectId')}</label><input class="p-id" value="${esc(p.id || '')}"></div>
+          <div class="form-group"><label>${t('projectName')}</label><input class="p-name" value="${esc(p.name || '')}"></div>
         </div>
-        <div class="form-group"><label>Brand Keywords (one per line)</label><textarea class="p-brand">${(p.keywords?.brand || []).join('\n')}</textarea></div>
-        <div class="form-group"><label>Industry Keywords (one per line)</label><textarea class="p-industry">${(p.keywords?.industry || []).join('\n')}</textarea></div>
-        <div class="form-group"><label>Competitor Keywords (one per line)</label><textarea class="p-competitor">${(p.keywords?.competitor || []).join('\n')}</textarea></div>
-        <div class="form-group"><label>Subreddits (one per line)</label><textarea class="p-subs">${(p.subreddits || []).join('\n')}</textarea></div>
+        <div class="form-group"><label>${t('brandKw')}</label><textarea class="p-brand">${(p.keywords?.brand || []).join('\n')}</textarea></div>
+        <div class="form-group"><label>${t('industryKw')}</label><textarea class="p-industry">${(p.keywords?.industry || []).join('\n')}</textarea></div>
+        <div class="form-group"><label>${t('competitorKw')}</label><textarea class="p-competitor">${(p.keywords?.competitor || []).join('\n')}</textarea></div>
+        <div class="form-group"><label>${t('subreddits')}</label><textarea class="p-subs">${(p.subreddits || []).join('\n')}</textarea></div>
       </div>`).join('');
 
     document.querySelectorAll('.del-project').forEach(btn => {
@@ -357,9 +448,9 @@ async function renderConfig() {
 
     try {
       await api('/config', { method: 'PUT', body: update });
-      toast('Config saved! Changes apply on next poll cycle.');
+      toast(t('configSaved'));
     } catch (e) {
-      toast('Save failed: ' + e.message);
+      toast(t('saveFailed') + e.message);
     }
   };
 }
