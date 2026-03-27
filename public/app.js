@@ -265,7 +265,7 @@ async function renderData() {
       <table>
         <thead><tr><th>${t('time')}</th><th>${t('type')}</th><th>${t('allCat').replace('全部', '')}</th><th>Subreddit</th><th>${t('title_col')}</th><th>${t('author')}</th><th>${t('score')}</th><th></th></tr></thead>
         <tbody>${d.rows.map(r => `<tr class="${r.is_read ? '' : 'unread'}" data-id="${r.id}">
-          <td style="white-space:nowrap">${fmtTime(r.discovered_at)}</td>
+          <td style="white-space:nowrap">${fmtUtc(r.created_utc)}</td>
           <td>${r.type === 'post' ? t('post') : t('comment')}</td>
           <td><span class="badge ${r.category}">${catLabel(r.category)}</span></td>
           <td>r/${r.subreddit}</td>
@@ -459,6 +459,12 @@ async function renderConfig() {
 function fmtTime(iso) {
   if (!iso) return '-';
   const d = new Date(iso);
+  return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+function fmtUtc(ts) {
+  if (!ts) return '-';
+  const d = new Date(ts * 1000);
   return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 

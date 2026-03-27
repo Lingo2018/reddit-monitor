@@ -46,7 +46,9 @@ export function createFetcher(proxyConfig) {
 
   async function doRequest(url, agent) {
     return new Promise((resolve, reject) => {
-      const req = https.get(url, { agent, headers: getBrowserHeaders(), timeout: 15000 }, (res) => {
+      const opts = { headers: getBrowserHeaders(), timeout: 15000 };
+      if (agent) opts.agent = agent;
+      const req = https.get(url, opts, (res) => {
         if (res.statusCode !== 200) { resolve({ status: res.statusCode }); return; }
         let data = '';
         res.on('data', c => data += c);
@@ -54,6 +56,7 @@ export function createFetcher(proxyConfig) {
           try { resolve({ status: 200, data: JSON.parse(data) }); }
           catch { resolve({ status: 200, data: null }); }
         });
+        res.on('error', () => resolve({ status: 0 }));
       });
       req.on('error', reject);
       req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });

@@ -161,6 +161,14 @@ async function loop() {
   setTimeout(loop, interval);
 }
 
+// 防止未捕获异常导致进程崩溃
+process.on('uncaughtException', (err) => {
+  log(`未捕获异常: ${err.message}`);
+});
+process.on('unhandledRejection', (err) => {
+  log(`未处理拒绝: ${err?.message || err}`);
+});
+
 log('Reddit Monitor 启动');
 const initConfig = loadConfig();
 const webPort = initConfig.webPort || 3000;
