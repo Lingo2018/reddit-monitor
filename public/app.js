@@ -299,7 +299,7 @@ async function renderData() {
           <td>${sentimentBadge(r.sentiment)}</td>
           <td><a class="reddit-link" href="https://reddit.com/u/${r.author}" target="_blank">u/${r.author}</a></td>
           <td class="truncate"><a class="reddit-link" href="https://reddit.com${r.permalink}" target="_blank">${esc(r.type === 'comment' ? (r.body?.slice(0, 100) || r.title || '-') : (r.title || '-'))}</a></td>
-          <td class="ai-cell" data-idx="${i}" style="cursor:pointer;color:var(--text-light);max-width:200px">${esc(r.ai_summary || '-')}</td>
+          <td class="ai-cell" data-idx="${i}" style="cursor:pointer;color:var(--text-light)">${esc(r.ai_summary || '-')}</td>
           <td>${r.score}</td>
         </tr>`).join('')}</tbody>
       </table>
