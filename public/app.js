@@ -181,21 +181,20 @@ function sentimentBadge(s) {
 // --- Stats ---
 async function renderStats() {
   app.innerHTML = `<p>${t('loading')}</p>`;
-  const [statsRes, analysisRes] = await Promise.all([api('/stats'), api('/analysis-stats')]);
-  const d = await statsRes.json();
-  const a = await analysisRes.json();
+  const res = await api('/stats');
+  const d = await res.json();
 
   const catMap = {};
   d.byCategory.forEach(c => catMap[c.category] = c.count);
   const sMap = {};
-  a.sentiments.forEach(s => sMap[s.sentiment] = s.count);
+  (d.sentiments || []).forEach(s => sMap[s.sentiment] = s.count);
 
   const maxDay = Math.max(...d.byDay.map(r => r.count), 1);
 
   app.innerHTML = `
     <div class="stats-grid">
       <div class="stat-card"><div class="label">${t('totalMentions')}</div><div class="value">${d.total}</div></div>
-      <div class="stat-card"><div class="label">${t('analyzed')}</div><div class="value">${a.analyzed}</div></div>
+      <div class="stat-card"><div class="label">${t('analyzed')}</div><div class="value">${d.analyzed || 0}</div></div>
       <div class="stat-card"><div class="label">${t('positive')}</div><div class="value" style="color:#4caf50">${sMap.positive || 0}</div></div>
       <div class="stat-card"><div class="label">${t('negative')}</div><div class="value" style="color:#e53935">${sMap.negative || 0}</div></div>
     </div>
