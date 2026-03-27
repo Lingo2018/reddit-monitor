@@ -13,12 +13,14 @@ const i18n = {
     competitor: '竞对', subreddit: 'Subreddit',
     analyzed: '已分析', actionable: '可执行',
     positive: '正面', negative: '负面', neutral: '中性',
+    hotPosts: '爆款帖',
     last30d: '近30天提及趋势', topSubs: '热门 Subreddit', recentPolls: '轮询日志',
     sentimentDist: '情感分布',
     time: '时间', type: '类型', newItems: '新增', duration: '耗时', errors: '错误',
     mentions: '提及',
     last24h: '近24小时', last7d: '近7天', last30dOpt: '近30天',
     allTime: '全部时间', all: '全部',
+    allSentiment: '全部情感', refresh: '刷新',
     search: '搜索...', filter: '筛选', markAllRead: '全部已读',
     totalResults: '共 {n} 条结果',
     title_col: '标题', author: '作者', score: '评分', sentiment: '情感',
@@ -53,12 +55,14 @@ const i18n = {
     competitor: 'Competitor', subreddit: 'Subreddit',
     analyzed: 'Analyzed', actionable: 'Actionable',
     positive: 'Positive', negative: 'Negative', neutral: 'Neutral',
+    hotPosts: 'Hot Posts',
     last30d: 'Mentions (Last 30 Days)', topSubs: 'Top Subreddits', recentPolls: 'Recent Polls',
     sentimentDist: 'Sentiment Distribution',
     time: 'Time', type: 'Type', newItems: 'New', duration: 'Duration', errors: 'Errors',
     mentions: 'Mentions',
     last24h: 'Last 24h', last7d: 'Last 7d', last30dOpt: 'Last 30d',
     allTime: 'All Time', all: 'All',
+    allSentiment: 'All Sentiment', refresh: 'Refresh',
     search: 'Search...', filter: 'Filter', markAllRead: 'Mark All Read',
     totalResults: 'Total: {n} results',
     title_col: 'Title', author: 'Author', score: 'Score', sentiment: 'Sentiment',
@@ -204,6 +208,19 @@ async function renderStats() {
     <div class="section">
       <h3>${t('last30d')}</h3>
       <div class="bar-chart" id="chart"></div>
+      ${(d.byDayDetail || []).length ? `
+      <table style="margin-top:16px;font-size:12px">
+        <thead><tr><th>${t('reportDate')}</th><th>${t('post')}</th><th>${t('comment')}</th><th>${t('positive')}</th><th>${t('negative')}</th><th>${t('neutral')}</th><th>${t('hotPosts')}</th></tr></thead>
+        <tbody>${(d.byDayDetail || []).slice(-14).reverse().map(r => `<tr>
+          <td>${r.day}</td>
+          <td>${r.posts}</td>
+          <td>${r.comments}</td>
+          <td style="color:#4caf50">${r.positive}</td>
+          <td style="color:#e53935">${r.negative}</td>
+          <td style="color:#ff9800">${r.neutral}</td>
+          <td style="color:var(--primary)">${r.hot_posts}</td>
+        </tr>`).join('')}</tbody>
+      </table>` : ''}
     </div>
 
     <div class="section">
@@ -236,7 +253,7 @@ async function renderStats() {
 }
 
 // --- Data ---
-let dataState = { page: 1, type: '', timeRange: '7d', search: '' };
+let dataState = { page: 1, type: '', timeRange: '7d', search: '', sentiment: '' };
 
 async function renderData() {
   app.innerHTML = `<p>${t('loading')}</p>`;
@@ -252,6 +269,12 @@ async function renderData() {
           <option value="post" ${dataState.type === 'post' ? 'selected' : ''}>${t('post')}</option>
           <option value="comment" ${dataState.type === 'comment' ? 'selected' : ''}>${t('comment')}</option>
         </select>
+        <select id="f-sentiment">
+          <option value="" ${dataState.sentiment === '' ? 'selected' : ''}>${t('allSentiment')}</option>
+          <option value="positive" ${dataState.sentiment === 'positive' ? 'selected' : ''}>${t('positive')}</option>
+          <option value="negative" ${dataState.sentiment === 'negative' ? 'selected' : ''}>${t('negative')}</option>
+          <option value="neutral" ${dataState.sentiment === 'neutral' ? 'selected' : ''}>${t('neutral')}</option>
+        </select>
         <select id="f-time">
           <option value="24h" ${dataState.timeRange === '24h' ? 'selected' : ''}>${t('last24h')}</option>
           <option value="7d" ${dataState.timeRange === '7d' ? 'selected' : ''}>${t('last7d')}</option>
@@ -260,6 +283,7 @@ async function renderData() {
         </select>
         <input type="text" id="f-search" placeholder="${t('search')}" value="${dataState.search}" autocomplete="off">
         <button class="btn btn-outline btn-sm" id="f-apply">${t('filter')}</button>
+        <button class="btn btn-outline btn-sm" id="f-refresh" title="${t('refresh')}">&#8635;</button>
         <div style="flex:1"></div>
         <div class="btn-group">
           <button class="btn btn-outline btn-sm" id="export-csv">CSV</button>
@@ -268,14 +292,14 @@ async function renderData() {
       </div>
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">${t('totalResults').replace('{n}', d.total)}</div>
       <table>
-        <thead><tr><th>${t('time')}</th><th>${t('type')}</th><th>${t('sentiment')}</th><th>Sub</th><th>${t('title_col')}</th><th>${t('aiSummary')}</th><th>${t('score')}</th></tr></thead>
-        <tbody>${d.rows.map(r => `<tr data-id="${r.id}">
+        <thead><tr><th>${t('time')}</th><th>${t('type')}</th><th>${t('sentiment')}</th><th>${t('author')}</th><th>${t('title_col')}</th><th>${t('aiSummary')}</th><th>${t('score')}</th></tr></thead>
+        <tbody>${d.rows.map((r, i) => `<tr data-id="${r.id}" data-idx="${i}">
           <td style="white-space:nowrap">${fmtUtc(r.created_utc)}</td>
           <td>${r.type === 'post' ? t('post') : t('comment')}</td>
           <td>${sentimentBadge(r.sentiment)}</td>
-          <td>r/${r.subreddit}</td>
+          <td><a class="reddit-link" href="https://reddit.com/u/${r.author}" target="_blank">u/${r.author}</a></td>
           <td class="truncate"><a class="reddit-link" href="https://reddit.com${r.permalink}" target="_blank">${esc(r.type === 'comment' ? (r.body?.slice(0, 100) || r.title || '-') : (r.title || '-'))}</a></td>
-          <td class="truncate" style="max-width:200px;color:var(--text-light)">${esc(r.ai_summary || '-')}</td>
+          <td class="ai-cell" data-idx="${i}" style="cursor:pointer;color:var(--text-light);max-width:200px">${esc(r.ai_summary || '-')}</td>
           <td>${r.score}</td>
         </tr>`).join('')}</tbody>
       </table>
@@ -284,18 +308,50 @@ async function renderData() {
         <span>${t('page').replace('{p}', d.page).replace('{t}', d.pages || 1)}</span>
         <button class="btn btn-outline btn-sm" id="next-page" ${d.page >= d.pages ? 'disabled' : ''}>${t('nextPage')}</button>
       </div>
+    </div>
+    <div id="detail-modal" class="modal" style="display:none">
+      <div class="modal-content">
+        <div class="modal-close" id="modal-close">&times;</div>
+        <div id="modal-body"></div>
+      </div>
     </div>`;
 
   $('#f-apply').onclick = () => {
     dataState.type = $('#f-type').value;
+    dataState.sentiment = $('#f-sentiment').value;
     dataState.timeRange = $('#f-time').value;
     dataState.search = $('#f-search').value;
     dataState.page = 1;
     renderData();
   };
+  $('#f-refresh').onclick = () => renderData();
   $('#f-search').onkeydown = e => { if (e.key === 'Enter') $('#f-apply').click(); };
   $('#prev-page').onclick = () => { dataState.page--; renderData(); };
   $('#next-page').onclick = () => { dataState.page++; renderData(); };
+
+  // AI summary expand modal
+  document.querySelectorAll('.ai-cell').forEach(cell => {
+    cell.onclick = () => {
+      const idx = +cell.dataset.idx;
+      const r = d.rows[idx];
+      if (!r) return;
+      const modal = $('#detail-modal');
+      const body = $('#modal-body');
+      body.innerHTML = `
+        <h3 style="margin-bottom:12px">${esc(r.type === 'comment' ? (r.body?.slice(0, 60) || '') : (r.title || ''))}</h3>
+        <div style="margin-bottom:12px">
+          ${sentimentBadge(r.sentiment)}
+          <span style="color:var(--text-muted);margin-left:8px">u/${r.author} · r/${r.subreddit} · ${fmtUtc(r.created_utc)}</span>
+        </div>
+        ${r.body ? `<div class="modal-section"><strong>${t('title_col')}</strong><p>${esc(r.body)}</p></div>` : ''}
+        ${r.ai_summary ? `<div class="modal-section"><strong>${t('aiSummary')}</strong><p>${esc(r.ai_summary)}</p></div>` : ''}
+        <div style="margin-top:12px"><a class="reddit-link" href="https://reddit.com${r.permalink}" target="_blank">Reddit &rarr;</a></div>
+      `;
+      modal.style.display = 'flex';
+    };
+  });
+  $('#modal-close').onclick = () => { $('#detail-modal').style.display = 'none'; };
+  $('#detail-modal').onclick = (e) => { if (e.target.id === 'detail-modal') $('#detail-modal').style.display = 'none'; };
 
   const exportParams = new URLSearchParams({ type: dataState.type, timeRange: dataState.timeRange, search: dataState.search }).toString();
   $('#export-csv').onclick = () => { window.open('/api/mentions/export?' + exportParams + '&format=csv'); };

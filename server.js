@@ -154,7 +154,7 @@ app.get('/api/stats', auth, (req, res) => {
   const { project } = req.query;
   const cacheKey = `stats:${project || 'all'}`;
 
-  const result = cached(cacheKey, 30000, () => {
+  const result = cached(cacheKey, 30000, () => { try {
     const since30d = new Date(Date.now() - 30 * 86400000).toISOString();
 
     const total = project ? SQL.mentionCountByProject.get(project).c : SQL.mentionCount.get().c;
@@ -164,27 +164,44 @@ app.get('/api/stats', auth, (req, res) => {
     const recentPolls = SQL.recentPolls.all();
     const byDay = project ? SQL.byDayByProject.all(project, since30d) : SQL.byDay.all(since30d);
 
+    // Detailed daily breakdown: posts, comments, sentiment, hot posts
+    const byDayDetail = db.prepare(`
+      SELECT date(m.discovered_at) as day,
+        SUM(CASE WHEN m.type='post' THEN 1 ELSE 0 END) as posts,
+        SUM(CASE WHEN m.type='comment' THEN 1 ELSE 0 END) as comments,
+        SUM(CASE WHEN a.sentiment='positive' THEN 1 ELSE 0 END) as positive,
+        SUM(CASE WHEN a.sentiment='negative' THEN 1 ELSE 0 END) as negative,
+        SUM(CASE WHEN a.sentiment='neutral' THEN 1 ELSE 0 END) as neutral,
+        SUM(CASE WHEN m.type='post' AND m.score >= 10 THEN 1 ELSE 0 END) as hot_posts
+      FROM mentions m
+      LEFT JOIN analysis a ON m.id = a.mention_id AND m.project = a.project
+      ${project ? 'WHERE m.project = ? AND' : 'WHERE'} m.discovered_at >= ?
+      GROUP BY day ORDER BY day
+    `).all(...(project ? [project, since30d] : [since30d]));
+
     // Analysis stats (merged)
     const sentiments = project ? SQL.sentimentsByProject.all(project) : SQL.sentiments.all();
     const analyzed = project ? SQL.analyzedCountByProject.get(project).c : SQL.analyzedCount.get().c;
     const actionable = project ? SQL.actionableCountByProject.get(project).c : SQL.actionableCount.get().c;
 
-    return { total, unread, byCategory, topSubs, byDay, recentPolls, sentiments, analyzed, actionable };
-  });
+    return { total, unread, byCategory, topSubs, byDay, byDayDetail, recentPolls, sentiments, analyzed, actionable };
+  } catch(e) { console.error('[stats]', e.message); return { total:0, unread:0, byCategory:[], topSubs:[], byDay:[], byDayDetail:[], recentPolls:[], sentiments:[], analyzed:0, actionable:0 }; } });
 
   res.json(result);
 });
 
 // --- Mentions with analysis (optimized) ---
 app.get('/api/mentions-analyzed', auth, (req, res) => {
-  const { project, type, search, timeRange, page = 1, limit = 50 } = req.query;
+  const { project, type, search, timeRange, sentiment, page = 1, limit = 50 } = req.query;
   const lim = Math.min(+limit || 50, 100);
   const offset = (Math.max(1, +page) - 1) * lim;
   const wheres = [];
   const params = [];
+  let needJoinForWhere = false;
 
   if (project) { wheres.push('m.project = ?'); params.push(project); }
   if (type) { wheres.push('m.type = ?'); params.push(type); }
+  if (sentiment) { wheres.push('a.sentiment = ?'); params.push(sentiment); needJoinForWhere = true; }
   if (search) { wheres.push("(m.title LIKE ? OR m.body LIKE ?)"); params.push(`%${search}%`, `%${search}%`); }
   if (timeRange) {
     const hours = { '24h': 24, '7d': 168, '30d': 720 }[timeRange];
@@ -198,8 +215,8 @@ app.get('/api/mentions-analyzed', auth, (req, res) => {
 
   const where = wheres.length ? 'WHERE ' + wheres.join(' AND ') : '';
 
-  // Count without JOIN (faster)
-  const total = db.prepare(`SELECT COUNT(*) as c FROM mentions m ${where}`).get(...params).c;
+  const joinForCount = needJoinForWhere ? 'LEFT JOIN analysis a ON m.id = a.mention_id AND m.project = a.project' : '';
+  const total = db.prepare(`SELECT COUNT(*) as c FROM mentions m ${joinForCount} ${where}`).get(...params).c;
 
   // Only JOIN analysis for the page rows
   const rows = db.prepare(`

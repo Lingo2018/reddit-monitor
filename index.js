@@ -59,16 +59,26 @@ async function runAnalysis(config) {
   if (!config.ai?.apiKey || !config.ai?.endpoint) return;
 
   for (const project of config.projects) {
-    const unanalyzed = getUnanalyzedMentions(project.id, 20);
-    if (!unanalyzed.length) { log(`  [${project.id}] 无待分析内容`); continue; }
+    // Loop through all unanalyzed in batches of 15
+    let totalAnalyzed = 0;
+    while (true) {
+      const unanalyzed = getUnanalyzedMentions(project.id, 15);
+      if (!unanalyzed.length) break;
 
-    log(`  [${project.id}] AI 分析 ${unanalyzed.length} 条...`);
-    const results = await analyzeBatch(config.ai, unanalyzed);
-    if (results.length) {
-      saveAnalysisBatch(results);
-      const sentiments = results.map(r => r.sentiment);
-      log(`  [${project.id}] 分析完成: ${results.length} 条 (正${sentiments.filter(s => s === 'positive').length}/负${sentiments.filter(s => s === 'negative').length}/中${sentiments.filter(s => s === 'neutral').length})`);
+      log(`  [${project.id}] AI 分析 ${unanalyzed.length} 条...`);
+      const results = await analyzeBatch(config.ai, unanalyzed);
+      if (results.length) {
+        saveAnalysisBatch(results);
+        totalAnalyzed += results.length;
+        const sentiments = results.map(r => r.sentiment);
+        log(`  [${project.id}] 批次完成: ${results.length} 条 (正${sentiments.filter(s => s === 'positive').length}/负${sentiments.filter(s => s === 'negative').length}/中${sentiments.filter(s => s === 'neutral').length})`);
+      } else {
+        log(`  [${project.id}] 分析返回空，跳过`);
+        break;
+      }
     }
+    if (totalAnalyzed) log(`  [${project.id}] 本轮共分析 ${totalAnalyzed} 条`);
+    else log(`  [${project.id}] 无待分析内容`);
   }
 }
 
