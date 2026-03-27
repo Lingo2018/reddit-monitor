@@ -254,20 +254,26 @@ app.get('/api/mentions/export', auth, (req, res) => {
   const wheres = [];
   const params = [];
 
-  if (project) { wheres.push('project = ?'); params.push(project); }
-  if (category) { wheres.push('category = ?'); params.push(category); }
-  if (search) { wheres.push("(title LIKE ? OR body LIKE ?)"); params.push(`%${search}%`, `%${search}%`); }
+  if (project) { wheres.push('m.project = ?'); params.push(project); }
+  if (category) { wheres.push('m.category = ?'); params.push(category); }
+  if (search) { wheres.push("(m.title LIKE ? OR m.body LIKE ?)"); params.push(`%${search}%`, `%${search}%`); }
   if (timeRange) {
     const hours = { '24h': 24, '7d': 168, '30d': 720 }[timeRange];
     if (hours) {
       const sinceUtc = Math.floor((Date.now() - hours * 3600000) / 1000);
-      wheres.push('created_utc >= ?');
+      wheres.push('m.created_utc >= ?');
       params.push(sinceUtc);
     }
   }
 
   const where = wheres.length ? 'WHERE ' + wheres.join(' AND ') : '';
-  const rows = db.prepare(`SELECT * FROM mentions ${where} ORDER BY created_utc DESC LIMIT 10000`).all(...params);
+  const rows = db.prepare(`
+    SELECT m.*, a.sentiment, a.relevance, a.pros as ai_pros, a.cons as ai_cons, a.actionable, a.summary as ai_summary
+    FROM mentions m
+    LEFT JOIN analysis a ON m.id = a.mention_id AND m.project = a.project
+    ${where}
+    ORDER BY m.created_utc DESC LIMIT 10000
+  `).all(...params);
   const date = new Date().toISOString().slice(0, 10);
 
   if (format === 'json') {
@@ -276,7 +282,7 @@ app.get('/api/mentions/export', auth, (req, res) => {
     return res.send(JSON.stringify(rows, null, 2));
   }
 
-  const cols = ['id', 'project', 'type', 'title', 'body', 'author', 'subreddit', 'permalink', 'score', 'num_comments', 'created_utc', 'discovered_at', 'source', 'category'];
+  const cols = ['id', 'project', 'type', 'title', 'body', 'author', 'subreddit', 'permalink', 'score', 'num_comments', 'created_utc', 'discovered_at', 'source', 'category', 'sentiment', 'relevance', 'ai_pros', 'ai_cons', 'actionable', 'ai_summary'];
   const escape = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
   let csv = cols.join(',') + '\n';
   for (const r of rows) csv += cols.map(c => escape(r[c])).join(',') + '\n';
