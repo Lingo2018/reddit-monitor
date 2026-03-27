@@ -32,6 +32,7 @@ const i18n = {
     saveFailed: '保存失败：',
     allMarkedRead: '已全部标为已读',
     post: '帖子', comment: '评论',
+    comingSoon: '暂不可用',
     langSwitch: 'EN',
   },
   en: {
@@ -62,6 +63,7 @@ const i18n = {
     saveFailed: 'Save failed: ',
     allMarkedRead: 'All marked as read',
     post: 'post', comment: 'comment',
+    comingSoon: 'Coming soon',
     langSwitch: '中文',
   }
 };
@@ -221,7 +223,7 @@ async function renderStats() {
 }
 
 // --- Data ---
-let dataState = { page: 1, category: '', timeRange: '7d', search: '', is_read: '' };
+let dataState = { page: 1, category: '', timeRange: '7d', search: '', type: '' };
 
 async function renderData() {
   app.innerHTML = `<p>${t('loading')}</p>`;
@@ -234,12 +236,8 @@ async function renderData() {
   app.innerHTML = `
     <div class="section">
       <div class="filters">
-        <select id="f-cat">
-          <option value="">${t('allCat')}</option>
-          <option value="brand" ${dataState.category === 'brand' ? 'selected' : ''}>${t('brand')}</option>
-          <option value="industry" ${dataState.category === 'industry' ? 'selected' : ''}>${t('industry')}</option>
-          <option value="competitor" ${dataState.category === 'competitor' ? 'selected' : ''}>${t('competitor')}</option>
-          <option value="subreddit" ${dataState.category === 'subreddit' ? 'selected' : ''}>${t('subreddit')}</option>
+        <select id="f-cat" style="display:none">
+          <option value="">All</option>
         </select>
         <select id="f-time">
           <option value="24h" ${dataState.timeRange === '24h' ? 'selected' : ''}>${t('last24h')}</option>
@@ -247,10 +245,10 @@ async function renderData() {
           <option value="30d" ${dataState.timeRange === '30d' ? 'selected' : ''}>${t('last30dOpt')}</option>
           <option value="" ${dataState.timeRange === '' ? 'selected' : ''}>${t('allTime')}</option>
         </select>
-        <select id="f-read">
-          <option value="" ${dataState.is_read === '' ? 'selected' : ''}>${t('all')}</option>
-          <option value="0" ${dataState.is_read === '0' ? 'selected' : ''}>${t('unreadOnly')}</option>
-          <option value="1" ${dataState.is_read === '1' ? 'selected' : ''}>${t('readOnly')}</option>
+        <select id="f-type">
+          <option value="" ${(dataState.type || '') === '' ? 'selected' : ''}>${t('all')}</option>
+          <option value="post" ${dataState.type === 'post' ? 'selected' : ''}>${t('post')}</option>
+          <option value="comment" ${dataState.type === 'comment' ? 'selected' : ''}>${t('comment')}</option>
         </select>
         <input type="text" id="f-search" placeholder="${t('search')}" value="${dataState.search}">
         <button class="btn btn-outline btn-sm" id="f-apply">${t('filter')}</button>
@@ -285,7 +283,7 @@ async function renderData() {
   $('#f-apply').onclick = () => {
     dataState.category = $('#f-cat').value;
     dataState.timeRange = $('#f-time').value;
-    dataState.is_read = $('#f-read').value;
+    dataState.type = $('#f-type').value;
     dataState.search = $('#f-search').value;
     dataState.page = 1;
     renderData();
@@ -391,10 +389,10 @@ async function renderConfig() {
           <div class="form-group"><label>${t('projectId')}</label><input class="p-id" value="${esc(p.id || '')}"></div>
           <div class="form-group"><label>${t('projectName')}</label><input class="p-name" value="${esc(p.name || '')}"></div>
         </div>
-        <div class="form-group"><label>${t('brandKw')}</label><textarea class="p-brand">${(p.keywords?.brand || []).join('\n')}</textarea></div>
-        <div class="form-group"><label>${t('industryKw')}</label><textarea class="p-industry">${(p.keywords?.industry || []).join('\n')}</textarea></div>
-        <div class="form-group"><label>${t('competitorKw')}</label><textarea class="p-competitor">${(p.keywords?.competitor || []).join('\n')}</textarea></div>
         <div class="form-group"><label>${t('subreddits')}</label><textarea class="p-subs">${(p.subreddits || []).join('\n')}</textarea></div>
+        <div class="form-group"><label>${t('brandKw')} <span style="color:var(--text-muted);font-size:11px">— ${t('comingSoon')}</span></label><textarea class="p-brand" disabled style="opacity:.5;cursor:not-allowed">${(p.keywords?.brand || []).join('\n')}</textarea></div>
+        <div class="form-group"><label>${t('industryKw')} <span style="color:var(--text-muted);font-size:11px">— ${t('comingSoon')}</span></label><textarea class="p-industry" disabled style="opacity:.5;cursor:not-allowed">${(p.keywords?.industry || []).join('\n')}</textarea></div>
+        <div class="form-group"><label>${t('competitorKw')} <span style="color:var(--text-muted);font-size:11px">— ${t('comingSoon')}</span></label><textarea class="p-competitor" disabled style="opacity:.5;cursor:not-allowed">${(p.keywords?.competitor || []).join('\n')}</textarea></div>
       </div>`).join('');
 
     document.querySelectorAll('.del-project').forEach(btn => {

@@ -64,13 +64,14 @@ app.put('/api/config', auth, (req, res) => {
 
 // --- Mentions ---
 app.get('/api/mentions', auth, (req, res) => {
-  const { project, category, search, timeRange, is_read, page = 1, limit = 50 } = req.query;
+  const { project, category, search, timeRange, is_read, type, page = 1, limit = 50 } = req.query;
   const offset = (Math.max(1, +page) - 1) * +limit;
   const wheres = [];
   const params = [];
 
   if (project) { wheres.push('project = ?'); params.push(project); }
   if (category) { wheres.push('category = ?'); params.push(category); }
+  if (type) { wheres.push('type = ?'); params.push(type); }
   if (is_read !== undefined && is_read !== '') { wheres.push('is_read = ?'); params.push(+is_read); }
   if (search) { wheres.push("(title LIKE ? OR body LIKE ?)"); params.push(`%${search}%`, `%${search}%`); }
   if (timeRange) {
