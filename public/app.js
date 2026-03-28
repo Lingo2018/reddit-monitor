@@ -210,10 +210,14 @@ $('#lang-btn').onclick = (e) => { e.preventDefault(); toggleLang(); route(); };
 
 // --- Sentiment helpers ---
 function sentimentBadge(s) {
-  if (!s) return '<span class="badge" style="background:#ccc">-</span>';
-  const colors = { positive: '#4caf50', negative: '#e53935', neutral: '#ff9800' };
+  if (!s) return '<span class="badge" style="background:rgba(255,255,255,0.08);color:#555e73">-</span>';
+  const colors = {
+    positive: 'linear-gradient(135deg, #00e676, #00b85c)',
+    negative: 'linear-gradient(135deg, #ff3d71, #cc2255)',
+    neutral: 'linear-gradient(135deg, #ffaa00, #cc8800)',
+  };
   const labels = { positive: t('positive'), negative: t('negative'), neutral: t('neutral') };
-  return `<span class="badge" style="background:${colors[s] || '#ccc'}">${labels[s] || s}</span>`;
+  return `<span class="badge" style="background:${colors[s] || 'rgba(255,255,255,0.08)'}">${labels[s] || s}</span>`;
 }
 
 // --- Stats ---
@@ -232,10 +236,10 @@ async function renderStats() {
 
   app.innerHTML = `
     <div class="stats-grid">
-      <div class="stat-card"><div class="label">${t('totalMentions')}</div><div class="value">${d.total}</div></div>
-      <div class="stat-card"><div class="label">${t('analyzed')}</div><div class="value">${d.analyzed || 0}</div></div>
-      <div class="stat-card"><div class="label">${t('positive')}</div><div class="value" style="color:#4caf50">${sMap.positive || 0}</div></div>
-      <div class="stat-card"><div class="label">${t('negative')}</div><div class="value" style="color:#e53935">${sMap.negative || 0}</div></div>
+      <div class="stat-card"><div class="label">${t('totalMentions')}</div><div class="value brand">${d.total}</div></div>
+      <div class="stat-card"><div class="label">${t('analyzed')}</div><div class="value unread">${d.analyzed || 0}</div></div>
+      <div class="stat-card"><div class="label">${t('positive')}</div><div class="value" style="color:var(--green);text-shadow:0 0 20px rgba(0,230,118,0.3)">${sMap.positive || 0}</div></div>
+      <div class="stat-card"><div class="label">${t('negative')}</div><div class="value" style="color:var(--red);text-shadow:0 0 20px rgba(255,61,113,0.3)">${sMap.negative || 0}</div></div>
     </div>
 
     <div class="section">
@@ -248,9 +252,9 @@ async function renderStats() {
           <td>${r.day}</td>
           <td>${r.posts}</td>
           <td>${r.comments}</td>
-          <td style="color:#4caf50">${r.positive}</td>
-          <td style="color:#e53935">${r.negative}</td>
-          <td style="color:#ff9800">${r.neutral}</td>
+          <td style="color:var(--green)">${r.positive}</td>
+          <td style="color:var(--red)">${r.negative}</td>
+          <td style="color:var(--orange)">${r.neutral}</td>
           <td style="color:var(--primary)">${r.hot_posts}</td>
         </tr>`).join('')}</tbody>
       </table>` : ''}
@@ -415,9 +419,9 @@ async function renderReports() {
         <tbody>${reports.map(r => `<tr>
           <td>${r.report_date}</td>
           <td>${r.total_count}</td>
-          <td style="color:#4caf50">${r.positive_count}</td>
-          <td style="color:#e53935">${r.negative_count}</td>
-          <td style="color:#ff9800">${r.neutral_count}</td>
+          <td style="color:var(--green)">${r.positive_count}</td>
+          <td style="color:var(--red)">${r.negative_count}</td>
+          <td style="color:var(--orange)">${r.neutral_count}</td>
           <td>${r.actionable_count}</td>
           <td><a href="#report/${r.report_date}?p=${r.project}" class="btn btn-sm btn-outline">${t('viewReport')}</a></td>
         </tr>`).join('')}</tbody>
@@ -444,10 +448,10 @@ async function renderReportDetail(dateAndParams) {
       <a href="#reports" class="btn btn-outline btn-sm">&larr; ${t('reports')}</a>
     </div>
     <div class="stats-grid">
-      <div class="stat-card"><div class="label">${t('reportTotal')}</div><div class="value">${r.total_count}</div></div>
-      <div class="stat-card"><div class="label">${t('positive')}</div><div class="value" style="color:#4caf50">${r.positive_count}</div></div>
-      <div class="stat-card"><div class="label">${t('negative')}</div><div class="value" style="color:#e53935">${r.negative_count}</div></div>
-      <div class="stat-card"><div class="label">${t('actionable')}</div><div class="value" style="color:#2196f3">${r.actionable_count}</div></div>
+      <div class="stat-card"><div class="label">${t('reportTotal')}</div><div class="value brand">${r.total_count}</div></div>
+      <div class="stat-card"><div class="label">${t('positive')}</div><div class="value" style="color:var(--green);text-shadow:0 0 20px rgba(0,230,118,0.3)">${r.positive_count}</div></div>
+      <div class="stat-card"><div class="label">${t('negative')}</div><div class="value" style="color:var(--red);text-shadow:0 0 20px rgba(255,61,113,0.3)">${r.negative_count}</div></div>
+      <div class="stat-card"><div class="label">${t('actionable')}</div><div class="value unread">${r.actionable_count}</div></div>
     </div>
     ${topPros.length ? `<div class="section"><h3>${t('positive')}</h3><ul>${topPros.map(p => `<li>${esc(p.text)} <span style="color:var(--text-muted)">(${p.count})</span></li>`).join('')}</ul></div>` : ''}
     ${topCons.length ? `<div class="section"><h3>${t('negative')}</h3><ul>${topCons.map(c => `<li>${esc(c.text)} <span style="color:var(--text-muted)">(${c.count})</span></li>`).join('')}</ul></div>` : ''}
