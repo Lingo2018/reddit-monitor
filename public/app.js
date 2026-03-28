@@ -27,7 +27,8 @@ const i18n = {
     title_col: '标题', author: '作者', score: '评分', sentiment: '情感',
     aiSummary: 'AI 摘要', markRead: '已读',
     prevPage: '上一页', nextPage: '下一页', page: '第 {p} / {t} 页',
-    proxySetting: '代理设置', enabled: '启用', host: '主机', port: '端口',
+    localProxySetting: '本地代理（Clash/V2Ray）',
+    proxySetting: '住宅代理', enabled: '启用', host: '主机', port: '端口',
     username: '用户名', passwordField: '密码', protocol: '协议',
     unchangedHint: '(留空不修改)',
     pollSetting: '轮询设置', interval: '间隔（分钟）', webPwd: '登录密码',
@@ -70,7 +71,8 @@ const i18n = {
     title_col: 'Title', author: 'Author', score: 'Score', sentiment: 'Sentiment',
     aiSummary: 'AI Summary', markRead: 'Read',
     prevPage: 'Prev', nextPage: 'Next', page: 'Page {p} / {t}',
-    proxySetting: 'Proxy Settings', enabled: 'Enabled', host: 'Host', port: 'Port',
+    localProxySetting: 'Local Proxy (Clash/V2Ray)',
+    proxySetting: 'Residential Proxy', enabled: 'Enabled', host: 'Host', port: 'Port',
     username: 'Username', passwordField: 'Password', protocol: 'Protocol',
     unchangedHint: '(unchanged if empty)',
     pollSetting: 'Poll Settings', interval: 'Interval (minutes)', webPwd: 'Web Password',
@@ -504,6 +506,27 @@ async function renderConfig() {
     </div>
 
     <div class="section">
+      <h3>${t('localProxySetting')}</h3>
+      <div class="form-row">
+        <div class="form-group">
+          <label>${t('enabled')}</label>
+          <select id="c-lp-enabled">
+            <option value="true" ${cfg.localProxy?.enabled ? 'selected' : ''}>Yes</option>
+            <option value="false" ${!cfg.localProxy?.enabled ? 'selected' : ''}>No</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>${t('host')}</label>
+          <input id="c-lp-host" value="${cfg.localProxy?.host || '127.0.0.1'}" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label>${t('port')}</label>
+          <input id="c-lp-port" type="number" value="${cfg.localProxy?.port || 10808}" autocomplete="off">
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
       <h3>${t('proxySetting')}</h3>
       <div class="form-row">
         <div class="form-group">
@@ -611,6 +634,11 @@ async function renderConfig() {
     const update = {
       projects: updatedProjects,
       pollIntervalMinutes: +$('#c-interval').value || 8,
+      localProxy: {
+        enabled: $('#c-lp-enabled').value === 'true',
+        host: $('#c-lp-host').value.trim() || '127.0.0.1',
+        port: +$('#c-lp-port').value || 10808,
+      },
       proxy: {
         enabled: $('#c-proxy-enabled').value === 'true',
         host: $('#c-proxy-host').value,

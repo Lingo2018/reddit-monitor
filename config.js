@@ -25,6 +25,12 @@ export function loadConfig() {
     ? `${p.protocol || 'http'}://${p.username}:${p.password}_country-us_session-${sessionId}@${p.host}:${p.port}`
     : null;
 
+  // Local proxy (clash/v2ray etc.) for Reddit fetching
+  const lp = cfg.localProxy || {};
+  const localProxyUrl = lp.enabled
+    ? `http://${lp.host || '127.0.0.1'}:${lp.port || 10808}`
+    : null;
+
   return {
     projects,
     pollIntervalMinutes: cfg.pollIntervalMinutes || 8,
@@ -36,7 +42,7 @@ export function loadConfig() {
         ? (cfg.kookeey?.localProxy
             ? `http://${cfg.kookeey.localProxy.host}:${cfg.kookeey.localProxy.port}`
             : 'http://127.0.0.1:10809')
-        : null,
+        : localProxyUrl,
     },
     kookeey: cfg.kookeey || null,
     ai: cfg.ai || null,
@@ -55,7 +61,7 @@ export function getConfigForUI() {
 
 export function saveConfig(updates) {
   const cfg = readRaw();
-  const allowed = ['projects', 'pollIntervalMinutes', 'proxy', 'kookeey', 'webPassword', 'ai'];
+  const allowed = ['projects', 'pollIntervalMinutes', 'proxy', 'kookeey', 'webPassword', 'ai', 'localProxy'];
 
   for (const key of allowed) {
     if (updates[key] !== undefined) {
