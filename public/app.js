@@ -333,12 +333,13 @@ async function renderData() {
       </div>
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">${t('totalResults').replace('{n}', d.total)}</div>
       <table>
-        <thead><tr><th>${t('time')}</th><th>${t('type')}</th><th>${t('sentiment')}</th><th>${t('author')}</th><th>${t('title_col')}</th><th>${t('aiSummary')}</th><th>${t('score')}</th></tr></thead>
+        <thead><tr><th>${t('time')}</th><th>${t('type')}</th><th>${t('sentiment')}</th><th>${t('author')}</th><th>Karma</th><th>${t('title_col')}</th><th>${t('aiSummary')}</th><th>${t('score')}</th></tr></thead>
         <tbody>${d.rows.map((r, i) => `<tr data-id="${r.id}" data-idx="${i}">
           <td style="white-space:nowrap">${fmtUtc(r.created_utc)}</td>
           <td>${r.type === 'post' ? t('post') : t('comment')}</td>
           <td>${sentimentBadge(r.sentiment)}</td>
           <td><a class="reddit-link" href="https://reddit.com/u/${r.author}" target="_blank">u/${r.author}</a></td>
+          <td style="color:var(--text-muted);font-size:12px">${r.total_karma != null ? fmtKarma(r.total_karma) : '-'}</td>
           <td class="truncate"><a class="reddit-link" href="https://reddit.com${r.permalink}" target="_blank">${esc(r.type === 'comment' ? (r.body?.slice(0, 100) || r.title || '-') : (r.title || '-'))}</a></td>
           <td class="ai-cell" data-idx="${i}" style="cursor:pointer;color:var(--text-light)">${esc(r.ai_summary || '-')}</td>
           <td>${r.score}</td>
@@ -382,7 +383,7 @@ async function renderData() {
         <h3 style="margin-bottom:12px">${esc(r.type === 'comment' ? (r.body?.slice(0, 60) || '') : (r.title || ''))}</h3>
         <div style="margin-bottom:12px">
           ${sentimentBadge(r.sentiment)}
-          <span style="color:var(--text-muted);margin-left:8px">u/${r.author} · r/${r.subreddit} · ${fmtUtc(r.created_utc)}</span>
+          <span style="color:var(--text-muted);margin-left:8px">u/${r.author}${r.total_karma != null ? ' · karma ' + fmtKarma(r.total_karma) : ''} · r/${r.subreddit} · ${fmtUtc(r.created_utc)}</span>
         </div>
         ${r.body ? `<div class="modal-section"><strong>${t('title_col')}</strong><p>${esc(r.body)}</p></div>` : ''}
         ${r.ai_summary ? `<div class="modal-section"><strong>${t('aiSummary')}</strong><p>${esc(r.ai_summary)}</p></div>` : ''}
@@ -701,6 +702,13 @@ function fmtUtc(ts) {
   if (!ts) return '-';
   const d = new Date(ts * 1000);
   return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+function fmtKarma(n) {
+  if (n == null) return '-';
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+  return String(n);
 }
 
 function esc(s) {

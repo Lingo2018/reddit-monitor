@@ -1,6 +1,7 @@
 import { loadConfig } from './config.js';
 import { createFetcher, createKookeeyFetcher } from './fetcher.js';
-import { saveMentions, logPoll, logCommentRate, getUnanalyzedMentions, saveAnalysisBatch, getDailyAnalysisStats, saveDailyReport } from './db.js';
+import db from './db.js';
+import { saveMentions, logPoll, logCommentRate, getUnanalyzedMentions, saveAnalysisBatch, getDailyAnalysisStats, saveDailyReport, getStaleUsers, saveUsers } from './db.js';
 import { analyzeBatch, generateDailyReport } from './analyzer.js';
 import app from './server.js';
 
@@ -145,6 +146,33 @@ async function runPoll() {
   logPoll({ poll_time: new Date().toISOString(), round_type: 'all', tasks_run: JSON.stringify(allTasks), new_items: totalNew, errors: allErrors.length ? JSON.stringify(allErrors) : null, duration_ms: durationMs });
 
   log(`=== 第 ${roundCount} 轮完成: ${totalNew} 新数据 / ${(durationMs / 1000).toFixed(1)}s ===`);
+
+  // Fetch user karma for new authors
+  try {
+    const fetcher = createFetcher(config.proxy);
+    // Collect all unique authors from this round
+    const allAuthors = [...new Set(
+      config.projects.flatMap(p => {
+        const rows = db.prepare('SELECT DISTINCT author FROM mentions WHERE project = ? AND author IS NOT NULL').all(p.id);
+        return rows.map(r => r.author);
+      })
+    )].filter(u => u && u !== '[deleted]' && u !== 'AutoModerator');
+
+    const stale = getStaleUsers(allAuthors, 24);
+    if (stale.length > 0) {
+      const batch = stale.slice(0, 10); // max 10 per round to respect rate limits
+      log(`  用户 karma 更新: ${batch.length}/${stale.length} 待更新`);
+      const results = [];
+      for (const username of batch) {
+        const info = await fetcher.userAbout(username);
+        if (info) results.push(info);
+      }
+      if (results.length) {
+        saveUsers(results);
+        log(`  用户 karma 完成: ${results.length} 条`);
+      }
+    }
+  } catch (err) { log(`用户 karma 异常: ${err.message}`); }
 
   // AI analysis
   try { await runAnalysis(config); } catch (err) { log(`AI 分析异常: ${err.message}`); }

@@ -218,12 +218,14 @@ app.get('/api/mentions-analyzed', auth, (req, res) => {
   const joinForCount = needJoinForWhere ? 'LEFT JOIN analysis a ON m.id = a.mention_id AND m.project = a.project' : '';
   const total = db.prepare(`SELECT COUNT(*) as c FROM mentions m ${joinForCount} ${where}`).get(...params).c;
 
-  // Only JOIN analysis for the page rows
+  // Only JOIN analysis + users for the page rows
   const rows = db.prepare(`
     SELECT m.id, m.project, m.type, m.title, m.body, m.author, m.subreddit, m.permalink, m.score, m.num_comments, m.created_utc,
-           a.sentiment, a.summary as ai_summary
+           a.sentiment, a.summary as ai_summary,
+           u.total_karma, u.comment_karma, u.link_karma
     FROM mentions m
     LEFT JOIN analysis a ON m.id = a.mention_id AND m.project = a.project
+    LEFT JOIN users u ON m.author = u.username
     ${where}
     ORDER BY m.created_utc DESC LIMIT ? OFFSET ?
   `).all(...params, lim, offset);

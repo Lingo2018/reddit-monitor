@@ -109,6 +109,21 @@ export function createFetcher(proxyConfig) {
   }
 
   return {
+    async userAbout(username) {
+      const url = `https://www.reddit.com/user/${encodeURIComponent(username)}/about.json`;
+      const data = await fetchJson(url);
+      if (!data?.data) return null;
+      const d = data.data;
+      return {
+        username: d.name || username,
+        total_karma: d.total_karma || 0,
+        link_karma: d.link_karma || 0,
+        comment_karma: d.comment_karma || 0,
+        account_created_utc: d.created_utc || 0,
+        last_fetched: new Date().toISOString(),
+      };
+    },
+
     async searchPosts(keyword) {
       const url = `https://www.reddit.com/search.json?q=${encodeURIComponent(keyword)}&type=link&sort=new&limit=25`;
       const data = await fetchJson(url);

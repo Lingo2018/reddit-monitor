@@ -111,6 +111,40 @@ export function existsId(id) {
   return !!db.prepare('SELECT 1 FROM mentions WHERE id = ?').get(id);
 }
 
+// --- Users table (karma cache) ---
+db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    username TEXT PRIMARY KEY,
+    total_karma INTEGER DEFAULT 0,
+    link_karma INTEGER DEFAULT 0,
+    comment_karma INTEGER DEFAULT 0,
+    account_created_utc INTEGER,
+    last_fetched TEXT
+  );
+`);
+
+const upsertUser = db.prepare(`
+  INSERT OR REPLACE INTO users (username, total_karma, link_karma, comment_karma, account_created_utc, last_fetched)
+  VALUES (@username, @total_karma, @link_karma, @comment_karma, @account_created_utc, @last_fetched)
+`);
+
+export function saveUsers(users) {
+  const tx = db.transaction((items) => {
+    for (const u of items) upsertUser.run(u);
+  });
+  tx(users);
+}
+
+export function getStaleUsers(usernames, maxAgeHours = 24) {
+  if (!usernames.length) return [];
+  const cutoff = new Date(Date.now() - maxAgeHours * 3600000).toISOString();
+  const existing = new Map();
+  for (const u of db.prepare('SELECT username, last_fetched FROM users').all()) {
+    existing.set(u.username, u.last_fetched);
+  }
+  return usernames.filter(u => !existing.has(u) || existing.get(u) < cutoff);
+}
+
 // --- Analysis tables ---
 db.exec(`
   CREATE TABLE IF NOT EXISTS analysis (
