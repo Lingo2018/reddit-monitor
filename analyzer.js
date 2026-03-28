@@ -6,19 +6,61 @@ function log(msg) {
 }
 
 /**
- * Call Claude API via custom endpoint
+ * Auto-detect API format from endpoint:
+ *   - /messages → Anthropic (Claude) format
+ *   - otherwise → OpenAI compatible format (OpenRouter, etc.)
  */
-async function callClaude(config, prompt, systemPrompt) {
+function isClaudeFormat(endpoint) {
+  return endpoint.includes('/messages');
+}
+
+function buildRequest(config, prompt, systemPrompt) {
+  if (isClaudeFormat(config.endpoint)) {
+    return {
+      body: {
+        model: config.model || 'claude-sonnet-4-20250514',
+        max_tokens: 4096,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: prompt }],
+      },
+      headers: {
+        'x-api-key': config.apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      parseResponse: (json) => {
+        if (json.content?.[0]?.text) return json.content[0].text;
+        throw new Error(json.error?.message || 'no content in response');
+      },
+    };
+  }
+
+  // OpenAI compatible (OpenRouter, etc.)
+  return {
+    body: {
+      model: config.model || 'anthropic/claude-sonnet-4',
+      max_tokens: 4096,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: prompt },
+      ],
+    },
+    headers: {
+      'Authorization': `Bearer ${config.apiKey}`,
+    },
+    parseResponse: (json) => {
+      if (json.choices?.[0]?.message?.content) return json.choices[0].message.content;
+      throw new Error(json.error?.message || 'no choices in response');
+    },
+  };
+}
+
+async function callLLM(config, prompt, systemPrompt) {
   const url = new URL(config.endpoint);
   const isHttps = url.protocol === 'https:';
   const mod = isHttps ? https : http;
+  const req_config = buildRequest(config, prompt, systemPrompt);
 
-  const body = JSON.stringify({
-    model: config.model || 'claude-sonnet-4-20250514',
-    max_tokens: 4096,
-    system: systemPrompt,
-    messages: [{ role: 'user', content: prompt }],
-  });
+  const body = JSON.stringify(req_config.body);
 
   return new Promise((resolve, reject) => {
     const req = mod.request({
@@ -28,9 +70,8 @@ async function callClaude(config, prompt, systemPrompt) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': config.apiKey,
-        'anthropic-version': '2023-06-01',
         'Content-Length': Buffer.byteLength(body),
+        ...req_config.headers,
       },
       timeout: 60000,
     }, (res) => {
@@ -39,9 +80,10 @@ async function callClaude(config, prompt, systemPrompt) {
       res.on('end', () => {
         try {
           const json = JSON.parse(data);
-          if (json.content?.[0]?.text) resolve(json.content[0].text);
-          else reject(new Error(json.error?.message || 'no content in response'));
-        } catch { reject(new Error('parse error: ' + data.slice(0, 200))); }
+          resolve(req_config.parseResponse(json));
+        } catch (e) {
+          reject(new Error(e.message + ' | raw: ' + data.slice(0, 300)));
+        }
       });
     });
     req.on('error', reject);
@@ -53,7 +95,6 @@ async function callClaude(config, prompt, systemPrompt) {
 
 /**
  * Analyze a batch of comments/posts
- * Returns array of { id, sentiment, relevance, pros, cons, actionable, summary }
  */
 export async function analyzeBatch(config, items) {
   if (!items.length) return [];
@@ -78,8 +119,7 @@ Keep summaries concise. Focus on product-related insights.`;
   const prompt = `Analyze these ${items.length} Reddit posts/comments:\n\n${itemsText}`;
 
   try {
-    const raw = await callClaude(config, prompt, systemPrompt);
-    // Extract JSON from response (may be wrapped in markdown code block)
+    const raw = await callLLM(config, prompt, systemPrompt);
     const jsonStr = raw.replace(/```json?\n?/g, '').replace(/```\n?/g, '').trim();
     const results = JSON.parse(jsonStr);
 
@@ -135,7 +175,7 @@ Please write a report with these sections:
 5. 总结 (brief conclusion)`;
 
   try {
-    const report = await callClaude(config, prompt, systemPrompt);
+    const report = await callLLM(config, prompt, systemPrompt);
     return report;
   } catch (err) {
     log(`报告生成失败: ${err.message}`);
