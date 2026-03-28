@@ -507,16 +507,42 @@ async function renderReportDetail(dateAndParams) {
 
 // Simple markdown renderer
 function markdownToHtml(md) {
-  return md
-    .replace(/^### (.+)$/gm, '<h4>$1</h4>')
-    .replace(/^## (.+)$/gm, '<h3>$1</h3>')
-    .replace(/^# (.+)$/gm, '<h2>$1</h2>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/^\- (.+)$/gm, '<li>$1</li>')
-    .replace(/^(\d+)\. (.+)$/gm, '<li>$2</li>')
-    .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
-    .replace(/\n\n/g, '<br><br>')
-    .replace(/\n/g, '<br>');
+  // Tables
+  md = md.replace(/^(\|.+\|)\n(\|[\s\-:|]+\|)\n((?:\|.+\|\n?)+)/gm, (match, header, sep, body) => {
+    const ths = header.split('|').filter(c => c.trim()).map(c => `<th>${c.trim()}</th>`).join('');
+    const rows = body.trim().split('\n').map(row => {
+      const tds = row.split('|').filter(c => c.trim()).map(c => `<td>${c.trim()}</td>`).join('');
+      return `<tr>${tds}</tr>`;
+    }).join('');
+    return `<table><thead><tr>${ths}</tr></thead><tbody>${rows}</tbody></table>`;
+  });
+
+  // Blockquotes
+  md = md.replace(/^>\s?(.+)$/gm, '<blockquote>$1</blockquote>');
+  md = md.replace(/<\/blockquote>\n<blockquote>/g, '<br>');
+
+  // Horizontal rules
+  md = md.replace(/^---+$/gm, '<hr>');
+
+  // Headers
+  md = md.replace(/^#### (.+)$/gm, '<h5>$1</h5>');
+  md = md.replace(/^### (.+)$/gm, '<h4>$1</h4>');
+  md = md.replace(/^## (.+)$/gm, '<h3>$1</h3>');
+  md = md.replace(/^# (.+)$/gm, '<h2>$1</h2>');
+
+  // Bold
+  md = md.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+  // Lists
+  md = md.replace(/^\- (.+)$/gm, '<li>$1</li>');
+  md = md.replace(/^(\d+)\. (.+)$/gm, '<li>$2</li>');
+  md = md.replace(/((?:<li>.*<\/li>\n?)+)/g, '<ul>$1</ul>');
+
+  // Line breaks
+  md = md.replace(/\n\n/g, '</p><p>');
+  md = md.replace(/\n/g, '<br>');
+
+  return `<p>${md}</p>`;
 }
 
 // --- Users ---

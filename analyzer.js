@@ -150,7 +150,7 @@ Keep summaries concise. Focus on product-related insights.`;
  */
 export async function generateDailyReport(config, project, stats) {
   const systemPrompt = `You are a brand reputation analyst writing a daily social media monitoring report in Chinese.
-Write a concise, actionable report in Markdown format.`;
+Write a COMPACT, actionable report in Markdown format. Use tables for data, keep text minimal. No excessive spacing or decoration. Be direct and data-driven.`;
 
   const prompt = `Generate a daily Reddit monitoring report for project "${project.name || project.id}".
 
