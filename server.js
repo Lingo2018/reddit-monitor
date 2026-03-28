@@ -317,7 +317,12 @@ app.get('/api/reports', auth, (req, res) => {
 
 app.get('/api/reports/:date', auth, (req, res) => {
   const { project } = req.query;
-  const row = SQL.reportByDate.get(req.params.date, project || '');
+  let row;
+  if (project) {
+    row = SQL.reportByDate.get(req.params.date, project);
+  } else {
+    row = db.prepare('SELECT * FROM daily_reports WHERE report_date = ? LIMIT 1').get(req.params.date);
+  }
   if (!row) return res.status(404).json({ error: 'not found' });
   res.json(row);
 });
