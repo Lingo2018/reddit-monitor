@@ -20,6 +20,7 @@ const i18n = {
     mentions: '提及',
     last24h: '近24小时', last7d: '近7天', last30dOpt: '近30天',
     allTime: '全部时间', all: '全部',
+    allProjects: '全部项目',
     allSentiment: '全部情感', refresh: '刷新',
     search: '搜索...', filter: '筛选', markAllRead: '全部已读',
     totalResults: '共 {n} 条结果',
@@ -62,6 +63,7 @@ const i18n = {
     mentions: 'Mentions',
     last24h: 'Last 24h', last7d: 'Last 7d', last30dOpt: 'Last 30d',
     allTime: 'All Time', all: 'All',
+    allProjects: 'All Projects',
     allSentiment: 'All Sentiment', refresh: 'Refresh',
     search: 'Search...', filter: 'Filter', markAllRead: 'Mark All Read',
     totalResults: 'Total: {n} results',
@@ -91,6 +93,8 @@ const i18n = {
 };
 
 let lang = localStorage.getItem('rm-lang') || 'zh';
+let currentProject = localStorage.getItem('rm-project') || '';
+let projectList = [];
 function t(key) { return i18n[lang]?.[key] || i18n.en[key] || key; }
 
 function updateNav() {
@@ -101,6 +105,23 @@ function updateNav() {
   $('#nav-logout').textContent = t('logout');
   $('#lang-btn').textContent = t('langSwitch');
   $('.nav-brand').textContent = t('title');
+  updateProjectSelector();
+}
+
+function updateProjectSelector() {
+  const sel = $('#project-selector');
+  if (!sel) return;
+  sel.innerHTML = `<option value="">${t('allProjects')}</option>` +
+    projectList.map(p => `<option value="${p.id}" ${currentProject === p.id ? 'selected' : ''}>${p.name || p.id}</option>`).join('');
+}
+
+async function loadProjects() {
+  try {
+    const res = await api('/config');
+    const cfg = await res.json();
+    projectList = cfg.projects || [];
+    updateProjectSelector();
+  } catch {}
 }
 
 // --- API helper ---
@@ -138,7 +159,18 @@ function route() {
 async function init() {
   try {
     const res = await fetch('/api/me');
-    if (res.ok) { navbar.style.display = 'flex'; updateNav(); route(); }
+    if (res.ok) {
+      navbar.style.display = 'flex';
+      await loadProjects();
+      updateNav();
+      // Project selector change
+      $('#project-selector').onchange = (e) => {
+        currentProject = e.target.value;
+        localStorage.setItem('rm-project', currentProject);
+        route();
+      };
+      route();
+    }
     else showLogin();
   } catch { showLogin(); }
 }
@@ -187,7 +219,8 @@ function sentimentBadge(s) {
 // --- Stats ---
 async function renderStats() {
   app.innerHTML = `<p>${t('loading')}</p>`;
-  const res = await api('/stats');
+  const pq = currentProject ? `?project=${currentProject}` : '';
+  const res = await api('/stats' + pq);
   const d = await res.json();
 
   const catMap = {};
@@ -257,7 +290,9 @@ let dataState = { page: 1, type: '', timeRange: '7d', search: '', sentiment: '' 
 
 async function renderData() {
   app.innerHTML = `<p>${t('loading')}</p>`;
-  const q = new URLSearchParams({ ...dataState, limit: 50 }).toString();
+  const qObj = { ...dataState, limit: 50 };
+  if (currentProject) qObj.project = currentProject;
+  const q = new URLSearchParams(qObj).toString();
   const res = await api('/mentions-analyzed?' + q);
   const d = await res.json();
 
@@ -353,7 +388,9 @@ async function renderData() {
   $('#modal-close').onclick = () => { $('#detail-modal').style.display = 'none'; };
   $('#detail-modal').onclick = (e) => { if (e.target.id === 'detail-modal') $('#detail-modal').style.display = 'none'; };
 
-  const exportParams = new URLSearchParams({ type: dataState.type, timeRange: dataState.timeRange, search: dataState.search }).toString();
+  const exportObj = { type: dataState.type, timeRange: dataState.timeRange, search: dataState.search };
+  if (currentProject) exportObj.project = currentProject;
+  const exportParams = new URLSearchParams(exportObj).toString();
   $('#export-csv').onclick = () => { window.open('/api/mentions/export?' + exportParams + '&format=csv'); };
   $('#export-json').onclick = () => { window.open('/api/mentions/export?' + exportParams + '&format=json'); };
 }
@@ -361,7 +398,8 @@ async function renderData() {
 // --- Reports ---
 async function renderReports() {
   app.innerHTML = `<p>${t('loading')}</p>`;
-  const res = await api('/reports');
+  const pq = currentProject ? `?project=${currentProject}` : '';
+  const res = await api('/reports' + pq);
   const reports = await res.json();
 
   if (!reports.length) {
