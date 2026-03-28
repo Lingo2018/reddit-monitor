@@ -25,6 +25,7 @@ async function runProject(project, fetcher) {
       log(`  [${pid}] r/${sub} 新帖`);
       const posts = await fetcher.subredditNew(sub);
       tasks.push(`sub_post:${sub}`);
+      if (!posts.length) errors.push(`sub_post:${sub}: no data returned`);
       for (const item of posts) {
         allMentions.push({ ...item, project: pid, discovered_at: new Date().toISOString(), source: 'subreddit', matched_keywords: '[]', category: 'subreddit' });
       }
@@ -32,6 +33,7 @@ async function runProject(project, fetcher) {
       log(`  [${pid}] r/${sub} 评论流`);
       const comments = await fetcher.subredditComments(sub);
       tasks.push(`sub_comments:${sub}`);
+      if (!comments.length) errors.push(`sub_comments:${sub}: no data returned`);
 
       // 频率统计
       if (comments.length > 1) {

@@ -82,7 +82,8 @@ export function createFetcher(proxyConfig) {
       }
     }
 
-    // 2. 本地代理（主力或 fallback）
+    // 2. 本地代理或直连（主力或 fallback）
+    let lastErr = '';
     for (let i = 0; i < 2; i++) {
       if (i > 0) await rateLimit();
       try {
@@ -95,12 +96,15 @@ export function createFetcher(proxyConfig) {
           await new Promise(r => setTimeout(r, wait));
           continue;
         }
+        lastErr = `HTTP ${result.status}`;
         console.warn(`[fetcher] HTTP ${result.status}: ${url}`);
         return null;
       } catch (err) {
+        lastErr = err.message;
         console.warn(`[fetcher] ${err.message}: ${url} (${i + 1}/2)`);
       }
     }
+    if (lastErr) console.error(`[fetcher] FAILED: ${lastErr} | ${url}`);
     return null;
   }
 
