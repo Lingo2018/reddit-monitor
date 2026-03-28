@@ -55,7 +55,12 @@ function buildRequest(config, prompt, systemPrompt) {
 }
 
 async function callLLM(config, prompt, systemPrompt) {
-  const url = new URL(config.endpoint);
+  let endpoint = config.endpoint.replace(/\/+$/, ''); // trim trailing slash
+  // Auto-append path if user only gave base URL
+  if (!isClaudeFormat(endpoint) && !endpoint.endsWith('/chat/completions')) {
+    endpoint += '/chat/completions';
+  }
+  const url = new URL(endpoint);
   const isHttps = url.protocol === 'https:';
   const mod = isHttps ? https : http;
   const req_config = buildRequest(config, prompt, systemPrompt);
