@@ -82,6 +82,7 @@ const SQL = {
 
 // --- In-memory cache ---
 const cache = { data: {}, ttl: {} };
+const CACHE_TTL = 60000; // 60s default
 function cached(key, ttlMs, fn) {
   const now = Date.now();
   if (cache.data[key] && cache.ttl[key] > now) return cache.data[key];
@@ -89,6 +90,9 @@ function cached(key, ttlMs, fn) {
   cache.data[key] = result;
   cache.ttl[key] = now + ttlMs;
   return result;
+}
+function invalidateAll() {
+  for (const key of Object.keys(cache.data)) { delete cache.data[key]; delete cache.ttl[key]; }
 }
 function invalidateCache(prefix) {
   for (const key of Object.keys(cache.data)) {
@@ -121,6 +125,12 @@ app.post('/api/login', (req, res) => {
 
 app.post('/api/logout', (req, res) => { res.clearCookie('token'); res.json({ ok: true }); });
 app.get('/api/me', auth, (req, res) => res.json({ ok: true }));
+
+// --- Cache refresh ---
+app.post('/api/refresh', auth, (req, res) => {
+  invalidateAll();
+  res.json({ ok: true, cleared: Date.now() });
+});
 
 // --- Config ---
 app.get('/api/config', auth, (req, res) => res.json(getConfigForUI()));
@@ -190,47 +200,49 @@ app.get('/api/stats', auth, (req, res) => {
   res.json(result);
 });
 
-// --- Mentions with analysis (optimized) ---
+// --- Mentions with analysis (optimized + cached) ---
 app.get('/api/mentions-analyzed', auth, (req, res) => {
   const { project, type, search, timeRange, sentiment, page = 1, limit = 50 } = req.query;
-  const lim = Math.min(+limit || 50, 100);
-  const offset = (Math.max(1, +page) - 1) * lim;
-  const wheres = [];
-  const params = [];
-  let needJoinForWhere = false;
+  const cacheKey = `mentions:${project||''}:${type||''}:${search||''}:${timeRange||''}:${sentiment||''}:${page}:${limit}`;
 
-  if (project) { wheres.push('m.project = ?'); params.push(project); }
-  if (type) { wheres.push('m.type = ?'); params.push(type); }
-  if (sentiment) { wheres.push('a.sentiment = ?'); params.push(sentiment); needJoinForWhere = true; }
-  if (search) { wheres.push("(m.title LIKE ? OR m.body LIKE ?)"); params.push(`%${search}%`, `%${search}%`); }
-  if (timeRange) {
-    const hours = { '24h': 24, '7d': 168, '30d': 720 }[timeRange];
-    if (hours) {
-      // Use created_utc (INTEGER) for faster comparison
-      const sinceUtc = Math.floor((Date.now() - hours * 3600000) / 1000);
-      wheres.push('m.created_utc >= ?');
-      params.push(sinceUtc);
+  const result = cached(cacheKey, CACHE_TTL, () => {
+    const lim = Math.min(+limit || 50, 100);
+    const offset = (Math.max(1, +page) - 1) * lim;
+    const wheres = [];
+    const params = [];
+    let needJoinForWhere = false;
+
+    if (project) { wheres.push('m.project = ?'); params.push(project); }
+    if (type) { wheres.push('m.type = ?'); params.push(type); }
+    if (sentiment) { wheres.push('a.sentiment = ?'); params.push(sentiment); needJoinForWhere = true; }
+    if (search) { wheres.push("(m.title LIKE ? OR m.body LIKE ?)"); params.push(`%${search}%`, `%${search}%`); }
+    if (timeRange) {
+      const hours = { '24h': 24, '7d': 168, '30d': 720 }[timeRange];
+      if (hours) {
+        const sinceUtc = Math.floor((Date.now() - hours * 3600000) / 1000);
+        wheres.push('m.created_utc >= ?');
+        params.push(sinceUtc);
+      }
     }
-  }
 
-  const where = wheres.length ? 'WHERE ' + wheres.join(' AND ') : '';
+    const where = wheres.length ? 'WHERE ' + wheres.join(' AND ') : '';
+    const joinForCount = needJoinForWhere ? 'LEFT JOIN analysis a ON m.id = a.mention_id AND m.project = a.project' : '';
+    const total = db.prepare(`SELECT COUNT(*) as c FROM mentions m ${joinForCount} ${where}`).get(...params).c;
 
-  const joinForCount = needJoinForWhere ? 'LEFT JOIN analysis a ON m.id = a.mention_id AND m.project = a.project' : '';
-  const total = db.prepare(`SELECT COUNT(*) as c FROM mentions m ${joinForCount} ${where}`).get(...params).c;
+    const rows = db.prepare(`
+      SELECT m.id, m.project, m.type, m.title, m.body, m.author, m.subreddit, m.permalink, m.score, m.num_comments, m.created_utc,
+             a.sentiment, a.summary as ai_summary,
+             u.total_karma, u.comment_karma, u.link_karma
+      FROM mentions m
+      LEFT JOIN analysis a ON m.id = a.mention_id AND m.project = a.project
+      LEFT JOIN users u ON m.author = u.username
+      ${where}
+      ORDER BY m.created_utc DESC LIMIT ? OFFSET ?
+    `).all(...params, lim, offset);
 
-  // Only JOIN analysis + users for the page rows
-  const rows = db.prepare(`
-    SELECT m.id, m.project, m.type, m.title, m.body, m.author, m.subreddit, m.permalink, m.score, m.num_comments, m.created_utc,
-           a.sentiment, a.summary as ai_summary,
-           u.total_karma, u.comment_karma, u.link_karma
-    FROM mentions m
-    LEFT JOIN analysis a ON m.id = a.mention_id AND m.project = a.project
-    LEFT JOIN users u ON m.author = u.username
-    ${where}
-    ORDER BY m.created_utc DESC LIMIT ? OFFSET ?
-  `).all(...params, lim, offset);
-
-  res.json({ rows, total, page: +page, pages: Math.ceil(total / lim) });
+    return { rows, total, page: +page, pages: Math.ceil(total / lim) };
+  });
+  res.json(result);
 });
 
 // --- Mark read ---
@@ -296,8 +308,11 @@ app.get('/api/mentions/export', auth, (req, res) => {
 // --- Reports ---
 app.get('/api/reports', auth, (req, res) => {
   const { project, limit = 30 } = req.query;
-  const rows = project ? SQL.reportsByProject.all(project, +limit) : SQL.reports.all(+limit);
-  res.json(rows);
+  const cacheKey = `reports:${project||''}:${limit}`;
+  const result = cached(cacheKey, CACHE_TTL * 5, () => {
+    return project ? SQL.reportsByProject.all(project, +limit) : SQL.reports.all(+limit);
+  });
+  res.json(result);
 });
 
 app.get('/api/reports/:date', auth, (req, res) => {
@@ -316,6 +331,9 @@ app.get('/api/poll-log', auth, (req, res) => {
 // --- User Rankings ---
 app.get('/api/users', auth, (req, res) => {
   const { project, sort = 'karma', page = 1, limit = 50 } = req.query;
+  const cacheKey = `users:${project||''}:${sort}:${page}:${limit}`;
+
+  const result = cached(cacheKey, CACHE_TTL * 2, () => {
   const lim = Math.min(+limit || 50, 100);
   const offset = (Math.max(1, +page) - 1) * lim;
 
@@ -357,7 +375,9 @@ app.get('/api/users', auth, (req, res) => {
     LIMIT ? OFFSET ?
   `).all(...pp, lim, offset);
 
-  res.json({ rows, total, page: +page, pages: Math.ceil(total / lim) });
+  return { rows, total, page: +page, pages: Math.ceil(total / lim) };
+  });
+  res.json(result);
 });
 
 // SPA fallback

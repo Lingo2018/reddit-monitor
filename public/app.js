@@ -219,6 +219,15 @@ function toggleLang() {
 
 $('#nav-logout').onclick = async (e) => { e.preventDefault(); await fetch('/api/logout', { method: 'POST' }); showLogin(); };
 $('#lang-btn').onclick = (e) => { e.preventDefault(); toggleLang(); route(); };
+$('#nav-refresh').onclick = async (e) => {
+  e.preventDefault();
+  const btn = $('#nav-refresh');
+  btn.classList.add('spinning');
+  try { await api('/refresh', { method: 'POST' }); } catch {}
+  setTimeout(() => btn.classList.remove('spinning'), 600);
+  route(); // re-render current page
+};
+
 
 // --- Sentiment helpers ---
 function sentimentBadge(s) {
@@ -376,7 +385,7 @@ async function renderData() {
     dataState.page = 1;
     renderData();
   };
-  $('#f-refresh').onclick = () => renderData();
+  $('#f-refresh').onclick = async () => { await api('/refresh', { method: 'POST' }).catch(()=>{}); renderData(); };
   $('#f-search').onkeydown = e => { if (e.key === 'Enter') $('#f-apply').click(); };
   $('#prev-page').onclick = () => { dataState.page--; renderData(); };
   $('#next-page').onclick = () => { dataState.page++; renderData(); };
@@ -551,7 +560,7 @@ async function renderUsers() {
     </div>`;
 
   $('#u-apply').onclick = () => { userState.sort = $('#u-sort').value; userState.page = 1; renderUsers(); };
-  $('#u-refresh').onclick = () => renderUsers();
+  $('#u-refresh').onclick = async () => { await api('/refresh', { method: 'POST' }).catch(()=>{}); renderUsers(); };
   $('#u-prev').onclick = () => { userState.page--; renderUsers(); };
   $('#u-next').onclick = () => { userState.page++; renderUsers(); };
 }

@@ -56,6 +56,10 @@ nav {
   color: var(--primary); background: rgba(0,200,255,0.08);
   box-shadow: 0 0 12px rgba(0,200,255,0.1);
 }
+.nav-refresh { font-size: 16px !important; padding: 4px 10px !important; }
+.nav-refresh:hover { color: var(--primary) !important; }
+.nav-refresh.spinning { animation: spin .6s ease; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 .nav-link.active::after {
   content: ''; position: absolute; bottom: -1px; left: 50%; transform: translateX(-50%);
   width: 20px; height: 2px; background: var(--primary); border-radius: 2px;
