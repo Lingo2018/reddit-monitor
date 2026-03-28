@@ -135,6 +135,25 @@ async function loadProjects() {
   } catch {}
 }
 
+// --- Client-side cache ---
+const clientCache = {};
+const CLIENT_CACHE_TTL = 60000;
+
+async function apiCached(path) {
+  const now = Date.now();
+  if (clientCache[path] && clientCache[path].exp > now) {
+    return clientCache[path].data;
+  }
+  const res = await api(path);
+  const data = await res.json();
+  clientCache[path] = { data, exp: now + CLIENT_CACHE_TTL };
+  return data;
+}
+
+function clearClientCache() {
+  for (const k of Object.keys(clientCache)) delete clientCache[k];
+}
+
 // --- API helper ---
 async function api(path, opts = {}) {
   const res = await fetch('/api' + path, {
@@ -144,6 +163,12 @@ async function api(path, opts = {}) {
   });
   if (res.status === 401) { showLogin(); throw new Error('unauthorized'); }
   return res;
+}
+
+function skeleton(rows = 4) {
+  const bar = '<div class="skel-bar"></div>';
+  return `<div class="skel-grid">${Array(4).fill('<div class="skel-card"></div>').join('')}</div>` +
+    Array(rows).fill(`<div class="skel-row">${bar}${bar}${bar}</div>`).join('');
 }
 
 function toast(msg) {
@@ -223,9 +248,10 @@ $('#nav-refresh').onclick = async (e) => {
   e.preventDefault();
   const btn = $('#nav-refresh');
   btn.classList.add('spinning');
+  clearClientCache();
   try { await api('/refresh', { method: 'POST' }); } catch {}
   setTimeout(() => btn.classList.remove('spinning'), 600);
-  route(); // re-render current page
+  route();
 };
 
 
@@ -243,10 +269,9 @@ function sentimentBadge(s) {
 
 // --- Stats ---
 async function renderStats() {
-  app.innerHTML = `<p>${t('loading')}</p>`;
+  app.innerHTML = skeleton(4);
   const pq = currentProject ? `?project=${currentProject}` : '';
-  const res = await api('/stats' + pq);
-  const d = await res.json();
+  const d = await apiCached('/stats' + pq);
 
   const catMap = {};
   d.byCategory.forEach(c => catMap[c.category] = c.count);
@@ -314,12 +339,11 @@ async function renderStats() {
 let dataState = { page: 1, type: '', timeRange: '7d', search: '', sentiment: '' };
 
 async function renderData() {
-  app.innerHTML = `<p>${t('loading')}</p>`;
+  app.innerHTML = skeleton(6);
   const qObj = { ...dataState, limit: 50 };
   if (currentProject) qObj.project = currentProject;
   const q = new URLSearchParams(qObj).toString();
-  const res = await api('/mentions-analyzed?' + q);
-  const d = await res.json();
+  const d = await apiCached('/mentions-analyzed?' + q);
 
   app.innerHTML = `
     <div class="section">
@@ -385,7 +409,7 @@ async function renderData() {
     dataState.page = 1;
     renderData();
   };
-  $('#f-refresh').onclick = async () => { await api('/refresh', { method: 'POST' }).catch(()=>{}); renderData(); };
+  $('#f-refresh').onclick = async () => { clearClientCache(); await api('/refresh', { method: 'POST' }).catch(()=>{}); renderData(); };
   $('#f-search').onkeydown = e => { if (e.key === 'Enter') $('#f-apply').click(); };
   $('#prev-page').onclick = () => { dataState.page--; renderData(); };
   $('#next-page').onclick = () => { dataState.page++; renderData(); };
@@ -423,10 +447,9 @@ async function renderData() {
 
 // --- Reports ---
 async function renderReports() {
-  app.innerHTML = `<p>${t('loading')}</p>`;
+  app.innerHTML = skeleton(3);
   const pq = currentProject ? `?project=${currentProject}` : '';
-  const res = await api('/reports' + pq);
-  const reports = await res.json();
+  const reports = await apiCached('/reports' + pq);
 
   if (!reports.length) {
     app.innerHTML = `<div class="section"><p style="color:var(--text-muted)">${t('noReports')}</p></div>`;
@@ -452,7 +475,7 @@ async function renderReports() {
 }
 
 async function renderReportDetail(dateAndParams) {
-  app.innerHTML = `<p>${t('loading')}</p>`;
+  app.innerHTML = skeleton(2);
   const [date] = dateAndParams.split('?');
   const params = new URLSearchParams(dateAndParams.split('?')[1] || '');
   const project = params.get('p') || '';
@@ -500,12 +523,11 @@ function markdownToHtml(md) {
 let userState = { page: 1, sort: 'karma' };
 
 async function renderUsers() {
-  app.innerHTML = `<p>${t('loading')}</p>`;
+  app.innerHTML = skeleton(5);
   const qObj = { ...userState, limit: 50 };
   if (currentProject) qObj.project = currentProject;
   const q = new URLSearchParams(qObj).toString();
-  const res = await api('/users?' + q);
-  const d = await res.json();
+  const d = await apiCached('/users?' + q);
 
   app.innerHTML = `
     <div class="section">
@@ -560,14 +582,14 @@ async function renderUsers() {
     </div>`;
 
   $('#u-apply').onclick = () => { userState.sort = $('#u-sort').value; userState.page = 1; renderUsers(); };
-  $('#u-refresh').onclick = async () => { await api('/refresh', { method: 'POST' }).catch(()=>{}); renderUsers(); };
+  $('#u-refresh').onclick = async () => { clearClientCache(); await api('/refresh', { method: 'POST' }).catch(()=>{}); renderUsers(); };
   $('#u-prev').onclick = () => { userState.page--; renderUsers(); };
   $('#u-next').onclick = () => { userState.page++; renderUsers(); };
 }
 
 // --- Config ---
 async function renderConfig() {
-  app.innerHTML = `<p>${t('loading')}</p>`;
+  app.innerHTML = skeleton(3);
   const res = await api('/config');
   const cfg = await res.json();
 

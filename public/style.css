@@ -263,6 +263,14 @@ a.reddit-link:hover { color: #fff; text-shadow: 0 0 10px rgba(0,200,255,0.4); }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
 
+/* === Skeleton Loading === */
+.skel-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
+.skel-card { height: 90px; border-radius: 14px; background: var(--gradient-card); border: 1px solid var(--border); animation: pulse 1.5s ease infinite; }
+.skel-row { display: flex; gap: 16px; margin-bottom: 12px; }
+.skel-bar { flex: 1; height: 16px; border-radius: 8px; background: rgba(255,255,255,0.04); animation: pulse 1.5s ease infinite; }
+@keyframes pulse { 0%,100% { opacity: 0.4; } 50% { opacity: 0.8; } }
+@media (max-width: 640px) { .skel-grid { grid-template-columns: 1fr 1fr; } }
+
 /* === Responsive === */
 @media (max-width: 640px) {
   .stats-grid { grid-template-columns: 1fr 1fr; }
