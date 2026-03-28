@@ -313,6 +313,53 @@ app.get('/api/poll-log', auth, (req, res) => {
   res.json(SQL.pollLog.all(limit));
 });
 
+// --- User Rankings ---
+app.get('/api/users', auth, (req, res) => {
+  const { project, sort = 'karma', page = 1, limit = 50 } = req.query;
+  const lim = Math.min(+limit || 50, 100);
+  const offset = (Math.max(1, +page) - 1) * lim;
+
+  const pw = project ? 'WHERE m.project = ?' : '';
+  const pp = project ? [project] : [];
+
+  const orderMap = {
+    karma: 'u.total_karma DESC',
+    posts: 'post_count DESC',
+    comments: 'comment_count DESC',
+    activity: 'total_count DESC',
+    recent: 'last_seen DESC',
+  };
+  const order = orderMap[sort] || orderMap.karma;
+
+  const total = db.prepare(`
+    SELECT COUNT(DISTINCT m.author) as c FROM mentions m ${pw}
+  `).get(...pp).c;
+
+  const rows = db.prepare(`
+    SELECT
+      m.author,
+      u.total_karma, u.link_karma, u.comment_karma, u.account_created_utc,
+      COUNT(*) as total_count,
+      SUM(CASE WHEN m.type='post' THEN 1 ELSE 0 END) as post_count,
+      SUM(CASE WHEN m.type='comment' THEN 1 ELSE 0 END) as comment_count,
+      MAX(m.created_utc) as last_seen,
+      MIN(m.created_utc) as first_seen,
+      ROUND(AVG(m.score), 1) as avg_score,
+      SUM(CASE WHEN a.sentiment='positive' THEN 1 ELSE 0 END) as positive_count,
+      SUM(CASE WHEN a.sentiment='negative' THEN 1 ELSE 0 END) as negative_count
+    FROM mentions m
+    LEFT JOIN users u ON m.author = u.username
+    LEFT JOIN analysis a ON m.id = a.mention_id AND m.project = a.project
+    ${pw}
+    GROUP BY m.author
+    HAVING m.author IS NOT NULL AND m.author != '[deleted]'
+    ORDER BY ${order}
+    LIMIT ? OFFSET ?
+  `).all(...pp, lim, offset);
+
+  res.json({ rows, total, page: +page, pages: Math.ceil(total / lim) });
+});
+
 // SPA fallback
 app.get('/{*splat}', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));

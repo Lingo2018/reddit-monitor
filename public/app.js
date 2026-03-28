@@ -43,6 +43,10 @@ const i18n = {
     post: '帖子', comment: '评论',
     testAi: '测试连接', testAiOk: '连接成功', testAiFail: '连接失败：', testAiTesting: '测试中...',
     comingSoon: '暂不可用',
+    users: '用户', sortKarma: 'Karma最高', sortPosts: '帖子最多', sortComments: '评论最多',
+    sortActivity: '最活跃', sortRecent: '最近活跃',
+    totalActivity: '总互动', posts: '帖子', comments: '评论', avgScore: '平均分',
+    firstSeen: '首次出现', lastSeen: '最近活跃', accountAge: '账龄',
     noReports: '暂无报告，数据累积后将自动生成每日舆情报告',
     reportDate: '日期', reportTotal: '总数', reportSentiment: '情感分布',
     viewReport: '查看',
@@ -87,6 +91,10 @@ const i18n = {
     post: 'post', comment: 'comment',
     testAi: 'Test Connection', testAiOk: 'Connected!', testAiFail: 'Failed: ', testAiTesting: 'Testing...',
     comingSoon: 'Coming soon',
+    users: 'Users', sortKarma: 'Top Karma', sortPosts: 'Most Posts', sortComments: 'Most Comments',
+    sortActivity: 'Most Active', sortRecent: 'Recently Active',
+    totalActivity: 'Total', posts: 'Posts', comments: 'Comments', avgScore: 'Avg Score',
+    firstSeen: 'First Seen', lastSeen: 'Last Active', accountAge: 'Account Age',
     noReports: 'No reports yet. Daily reports will be auto-generated once data accumulates.',
     reportDate: 'Date', reportTotal: 'Total', reportSentiment: 'Sentiment',
     viewReport: 'View',
@@ -103,6 +111,7 @@ function updateNav() {
   $('#nav-stats').textContent = t('stats');
   $('#nav-data').textContent = t('data');
   $('#nav-reports').textContent = t('reports');
+  $('#nav-users').textContent = t('users');
   $('#nav-config').textContent = t('config');
   $('#nav-logout').textContent = t('logout');
   $('#lang-btn').textContent = t('langSwitch');
@@ -154,6 +163,7 @@ function route() {
   if (hash === 'stats') renderStats();
   else if (hash === 'data') renderData();
   else if (hash === 'reports') renderReports();
+  else if (hash === 'users') renderUsers();
   else if (hash === 'config') renderConfig();
   else if (hash.startsWith('report/')) renderReportDetail(hash.slice(7));
 }
@@ -477,6 +487,75 @@ function markdownToHtml(md) {
     .replace(/\n/g, '<br>');
 }
 
+// --- Users ---
+let userState = { page: 1, sort: 'karma' };
+
+async function renderUsers() {
+  app.innerHTML = `<p>${t('loading')}</p>`;
+  const qObj = { ...userState, limit: 50 };
+  if (currentProject) qObj.project = currentProject;
+  const q = new URLSearchParams(qObj).toString();
+  const res = await api('/users?' + q);
+  const d = await res.json();
+
+  app.innerHTML = `
+    <div class="section">
+      <div class="filters">
+        <select id="u-sort">
+          <option value="karma" ${userState.sort === 'karma' ? 'selected' : ''}>${t('sortKarma')}</option>
+          <option value="activity" ${userState.sort === 'activity' ? 'selected' : ''}>${t('sortActivity')}</option>
+          <option value="posts" ${userState.sort === 'posts' ? 'selected' : ''}>${t('sortPosts')}</option>
+          <option value="comments" ${userState.sort === 'comments' ? 'selected' : ''}>${t('sortComments')}</option>
+          <option value="recent" ${userState.sort === 'recent' ? 'selected' : ''}>${t('sortRecent')}</option>
+        </select>
+        <button class="btn btn-outline btn-sm" id="u-apply">${t('filter')}</button>
+        <button class="btn btn-outline btn-sm" id="u-refresh">&#8635;</button>
+        <div style="flex:1"></div>
+        <span style="font-size:12px;color:var(--text-muted)">${t('totalResults').replace('{n}', d.total)}</span>
+      </div>
+      <table>
+        <thead><tr>
+          <th>#</th>
+          <th>${t('author')}</th>
+          <th>Karma</th>
+          <th>${t('totalActivity')}</th>
+          <th>${t('posts')}</th>
+          <th>${t('comments')}</th>
+          <th>${t('avgScore')}</th>
+          <th>${t('positive')}/${t('negative')}</th>
+          <th>${t('lastSeen')}</th>
+          <th>${t('accountAge')}</th>
+        </tr></thead>
+        <tbody>${d.rows.map((r, i) => {
+          const rank = (d.page - 1) * 50 + i + 1;
+          const age = r.account_created_utc ? fmtAge(r.account_created_utc) : '-';
+          return `<tr>
+            <td style="color:var(--text-muted)">${rank}</td>
+            <td><a class="reddit-link" href="https://reddit.com/u/${r.author}" target="_blank">u/${r.author}</a></td>
+            <td style="font-weight:700;color:var(--primary)">${r.total_karma != null ? fmtKarma(r.total_karma) : '-'}</td>
+            <td style="font-weight:600">${r.total_count}</td>
+            <td>${r.post_count}</td>
+            <td>${r.comment_count}</td>
+            <td>${r.avg_score ?? '-'}</td>
+            <td><span style="color:var(--green)">${r.positive_count || 0}</span> / <span style="color:var(--red)">${r.negative_count || 0}</span></td>
+            <td>${fmtUtc(r.last_seen)}</td>
+            <td style="color:var(--text-muted);font-size:12px">${age}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+      <div class="pagination">
+        <button class="btn btn-outline btn-sm" id="u-prev" ${d.page <= 1 ? 'disabled' : ''}>${t('prevPage')}</button>
+        <span>${t('page').replace('{p}', d.page).replace('{t}', d.pages || 1)}</span>
+        <button class="btn btn-outline btn-sm" id="u-next" ${d.page >= d.pages ? 'disabled' : ''}>${t('nextPage')}</button>
+      </div>
+    </div>`;
+
+  $('#u-apply').onclick = () => { userState.sort = $('#u-sort').value; userState.page = 1; renderUsers(); };
+  $('#u-refresh').onclick = () => renderUsers();
+  $('#u-prev').onclick = () => { userState.page--; renderUsers(); };
+  $('#u-next').onclick = () => { userState.page++; renderUsers(); };
+}
+
 // --- Config ---
 async function renderConfig() {
   app.innerHTML = `<p>${t('loading')}</p>`;
@@ -702,6 +781,16 @@ function fmtUtc(ts) {
   if (!ts) return '-';
   const d = new Date(ts * 1000);
   return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+function fmtAge(utc) {
+  if (!utc) return '-';
+  const days = Math.floor((Date.now() / 1000 - utc) / 86400);
+  if (days < 30) return days + 'd';
+  if (days < 365) return Math.floor(days / 30) + 'mo';
+  const y = Math.floor(days / 365);
+  const m = Math.floor((days % 365) / 30);
+  return m ? y + 'y' + m + 'mo' : y + 'y';
 }
 
 function fmtKarma(n) {
