@@ -42,13 +42,14 @@ const i18n = {
     saveFailed: '保存失败：',
     allMarkedRead: '已全部标为已读',
     post: '帖子', comment: '评论',
-    testAi: '测试连接', testAiOk: '连接成功', testAiFail: '连接失败：', testAiTesting: '测试中...',
+    testAi: '测试连接', reanalyze: '重新分析全部数据', reanalyzeOk: '已清除旧分析，下轮自动重新分析',
+    testAiOk: '连接成功', testAiFail: '连接失败：', testAiTesting: '测试中...',
     comingSoon: '暂不可用',
     users: '用户', sortKarma: 'Karma最高', sortPosts: '帖子最多', sortComments: '评论最多',
     sortActivity: '最活跃', sortRecent: '最近活跃',
     totalActivity: '总互动', posts: '帖子', comments: '评论', avgScore: '平均分',
     firstSeen: '首次出现', lastSeen: '最近活跃', accountAge: '账龄',
-    genSummary: '生成汇总报告',
+    genSummary: '生成汇总报告', reportGenerated: '报告已生成',
     noReports: '暂无报告，数据累积后将自动生成每日舆情报告',
     reportDate: '日期', reportTotal: '总数', reportSentiment: '情感分布',
     viewReport: '查看',
@@ -92,13 +93,14 @@ const i18n = {
     saveFailed: 'Save failed: ',
     allMarkedRead: 'All marked as read',
     post: 'post', comment: 'comment',
-    testAi: 'Test Connection', testAiOk: 'Connected!', testAiFail: 'Failed: ', testAiTesting: 'Testing...',
+    testAi: 'Test Connection', reanalyze: 'Re-analyze All Data', reanalyzeOk: 'Old analysis cleared. Will re-analyze on next poll.',
+    testAiOk: 'Connected!', testAiFail: 'Failed: ', testAiTesting: 'Testing...',
     comingSoon: 'Coming soon',
     users: 'Users', sortKarma: 'Top Karma', sortPosts: 'Most Posts', sortComments: 'Most Comments',
     sortActivity: 'Most Active', sortRecent: 'Recently Active',
     totalActivity: 'Total', posts: 'Posts', comments: 'Comments', avgScore: 'Avg Score',
     firstSeen: 'First Seen', lastSeen: 'Last Active', accountAge: 'Account Age',
-    genSummary: 'Generate Summary Report',
+    genSummary: 'Generate Summary Report', reportGenerated: 'Report generated',
     noReports: 'No reports yet. Daily reports will be auto-generated once data accumulates.',
     reportDate: 'Date', reportTotal: 'Total', reportSentiment: 'Sentiment',
     viewReport: 'View',
@@ -448,7 +450,7 @@ async function renderReports() {
       <table>
         <thead><tr><th>${t('reportDate')}</th><th>${t('reportTotal')}</th><th>${t('positive')}</th><th>${t('negative')}</th><th>${t('neutral')}</th><th>${t('actionable')}</th><th></th></tr></thead>
         <tbody>${reports.map(r => `<tr>
-          <td>${r.report_date}</td>
+          <td style="white-space:nowrap">${r.report_date.startsWith('summary') ? r.report_date : r.report_date}${r.created_at ? '<br><span style="font-size:11px;color:var(--text-muted)">' + fmtTime(r.created_at) + '</span>' : ''}</td>
           <td>${r.total_count}</td>
           <td style="color:var(--green)">${r.positive_count}</td>
           <td style="color:var(--red)">${r.negative_count}</td>
@@ -469,7 +471,7 @@ async function renderReports() {
       try {
         await api(`/reports/regenerate`, { method: 'POST', body: { date: btn.dataset.date, project: btn.dataset.project } });
         clearClientCache();
-        toast(t('configSaved'));
+        toast(t('reportGenerated'));
         renderReports();
       } catch (e) {
         toast(t('saveFailed') + e.message);
@@ -490,7 +492,7 @@ async function renderReports() {
       const d = await res.json();
       if (d.ok) {
         clearClientCache();
-        toast(t('configSaved'));
+        toast(t('reportGenerated'));
         renderReports();
       } else {
         toast(d.error || 'failed');
@@ -665,9 +667,10 @@ async function renderConfig() {
           <input id="c-ai-model" value="${cfg.ai?.model || 'claude-sonnet-4-20250514'}" autocomplete="off">
         </div>
       </div>
-      <div style="margin-top:8px">
+      <div style="margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <button class="btn btn-outline btn-sm" id="test-ai">${t('testAi')}</button>
-        <span id="test-ai-result" style="margin-left:10px;font-size:13px"></span>
+        <button class="btn btn-outline btn-sm" id="reanalyze-btn">${t('reanalyze')}</button>
+        <span id="test-ai-result" style="font-size:13px"></span>
       </div>
     </div>
 
@@ -860,6 +863,21 @@ async function renderConfig() {
       result.textContent = t('testAiFail') + e.message;
       result.style.color = '#e53935';
     }
+  };
+
+  $('#reanalyze-btn').onclick = async () => {
+    const proj = currentProject || (projectList[0]?.id);
+    if (!proj) { toast('请先选择项目'); return; }
+    const btn = $('#reanalyze-btn');
+    btn.textContent = '...';
+    btn.disabled = true;
+    try {
+      await api('/reanalyze', { method: 'POST', body: { project: proj } });
+      clearClientCache();
+      toast(t('reanalyzeOk'));
+    } catch (e) { toast(e.message); }
+    btn.textContent = t('reanalyze');
+    btn.disabled = false;
   };
 }
 

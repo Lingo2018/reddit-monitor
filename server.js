@@ -364,6 +364,19 @@ app.post('/api/reports/regenerate', auth, async (req, res) => {
   }
 });
 
+// --- Re-analyze all (clear old analysis, redo with current prompts) ---
+app.post('/api/reanalyze', auth, async (req, res) => {
+  const { project } = req.body;
+  if (!project) return res.status(400).json({ error: 'project required' });
+  try {
+    db.prepare('DELETE FROM analysis WHERE project = ?').run(project);
+    invalidateAll();
+    res.json({ ok: true, message: 'Analysis cleared. Will re-analyze on next poll cycle.' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- Summary Report ---
 app.post('/api/reports/summary', auth, async (req, res) => {
   const { project } = req.body;
