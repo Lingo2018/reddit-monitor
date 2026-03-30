@@ -870,7 +870,8 @@ async function renderConfig() {
   };
 
   $('#reanalyze-btn').onclick = async () => {
-    const projects = currentProject ? [currentProject] : projectList.filter(p => p.enabled !== false).map(p => p.id);
+    const cards = document.querySelectorAll('.project-card');
+    const projects = currentProject ? [currentProject] : [...cards].map(c => c.querySelector('.p-id').value.trim()).filter(Boolean);
     if (!projects.length) { toast('无可用项目'); return; }
     const btn = $('#reanalyze-btn');
     btn.textContent = '...';
