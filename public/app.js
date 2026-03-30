@@ -48,6 +48,7 @@ const i18n = {
     sortActivity: '最活跃', sortRecent: '最近活跃',
     totalActivity: '总互动', posts: '帖子', comments: '评论', avgScore: '平均分',
     firstSeen: '首次出现', lastSeen: '最近活跃', accountAge: '账龄',
+    genSummary: '生成汇总报告',
     noReports: '暂无报告，数据累积后将自动生成每日舆情报告',
     reportDate: '日期', reportTotal: '总数', reportSentiment: '情感分布',
     viewReport: '查看',
@@ -97,6 +98,7 @@ const i18n = {
     sortActivity: 'Most Active', sortRecent: 'Recently Active',
     totalActivity: 'Total', posts: 'Posts', comments: 'Comments', avgScore: 'Avg Score',
     firstSeen: 'First Seen', lastSeen: 'Last Active', accountAge: 'Account Age',
+    genSummary: 'Generate Summary Report',
     noReports: 'No reports yet. Daily reports will be auto-generated once data accumulates.',
     reportDate: 'Date', reportTotal: 'Total', reportSentiment: 'Sentiment',
     viewReport: 'View',
@@ -439,7 +441,10 @@ async function renderReports() {
 
   app.innerHTML = `
     <div class="section">
-      <h3>${t('reports')}</h3>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <h3 style="margin:0">${t('reports')}</h3>
+        <button class="btn btn-primary btn-sm" id="gen-summary">${t('genSummary')}</button>
+      </div>
       <table>
         <thead><tr><th>${t('reportDate')}</th><th>${t('reportTotal')}</th><th>${t('positive')}</th><th>${t('negative')}</th><th>${t('neutral')}</th><th>${t('actionable')}</th><th></th></tr></thead>
         <tbody>${reports.map(r => `<tr>
@@ -473,6 +478,29 @@ async function renderReports() {
       }
     };
   });
+
+  $('#gen-summary').onclick = async () => {
+    const proj = currentProject || (projectList[0]?.id);
+    if (!proj) { toast('请先选择项目'); return; }
+    const btn = $('#gen-summary');
+    btn.textContent = '...';
+    btn.disabled = true;
+    try {
+      const res = await api('/reports/summary', { method: 'POST', body: { project: proj } });
+      const d = await res.json();
+      if (d.ok) {
+        clearClientCache();
+        toast(t('configSaved'));
+        renderReports();
+      } else {
+        toast(d.error || 'failed');
+      }
+    } catch (e) {
+      toast(e.message);
+    }
+    btn.textContent = t('genSummary');
+    btn.disabled = false;
+  };
 }
 
 async function renderReportDetail(dateAndParams) {

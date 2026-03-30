@@ -200,3 +200,49 @@ ${stats.samples.map((s, i) => `${i + 1}. [${s.sentiment}] ${s.summary}`).join('\
     return null;
   }
 }
+
+/**
+ * Generate summary report for all accumulated data
+ */
+export async function generateSummaryReport(config, project, stats) {
+  const role = project.reportRole
+    ? `你是${project.reportRole}。从${project.reportRole}的专业视角撰写 Reddit 社媒舆情汇总报告。`
+    : '你是品牌舆情分析师，撰写 Reddit 社媒舆情汇总报告。';
+
+  const systemPrompt = `${role}
+要求：全文中文，系统性总结，Markdown 格式。用表格呈现数据，文字精炼有洞察。给出战略级建议，不要空话。`;
+
+  const prompt = `为项目「${project.name || project.id}」生成 Reddit 舆情汇总报告。
+
+累计数据概览：
+- 总提及：${stats.total}
+- 帖子/评论：${stats.posts} / ${stats.comments}
+- 情感分布：正面 ${stats.positive}、负面 ${stats.negative}、中性 ${stats.neutral}
+- 可执行反馈：${stats.actionable} 条
+
+累计高频负面问题（按提及次数排序）：
+${stats.topCons.map((c, i) => `${i + 1}. ${c.text}（${c.count} 次）`).join('\n') || '无'}
+
+累计高频正面评价（按提及次数排序）：
+${stats.topPros.map((c, i) => `${i + 1}. ${c.text}（${c.count} 次）`).join('\n') || '无'}
+
+高相关度评论摘要：
+${stats.samples.map((s, i) => `${i + 1}. [${s.sentiment}] ${s.summary}`).join('\n') || '无'}
+
+请按以下结构撰写汇总报告：
+1. 整体舆情画像（数据总览 + 情感趋势判断）
+2. 品牌口碑核心优势（用户最认可的方面）
+3. 核心风险与高频痛点（按严重程度排序）
+4. 竞对对比洞察（如数据中有竞品讨论）
+5. 战略建议（产品、运营、公关、社区维护）
+6. 高价值用户运营建议
+7. 总结与下一步行动`;
+
+  try {
+    const report = await callLLM(config, prompt, systemPrompt);
+    return report;
+  } catch (err) {
+    log(`汇总报告生成失败: ${err.message}`);
+    return null;
+  }
+}

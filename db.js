@@ -250,4 +250,44 @@ export function saveDailyReport(report) {
   return insertReport.run(report);
 }
 
+export function getAllAnalysisStats(project) {
+  const pw = project ? 'WHERE m.project = ?' : '';
+  const pp = project ? [project] : [];
+
+  const total = db.prepare(`SELECT COUNT(*) as c FROM mentions m ${pw}`).get(...pp).c;
+  const posts = db.prepare(`SELECT COUNT(*) as c FROM mentions m ${pw ? pw + ' AND' : 'WHERE'} m.type = 'post'`).get(...pp).c;
+  const comments = db.prepare(`SELECT COUNT(*) as c FROM mentions m ${pw ? pw + ' AND' : 'WHERE'} m.type = 'comment'`).get(...pp).c;
+
+  const sentiments = db.prepare(`SELECT a.sentiment, COUNT(*) as c FROM mentions m JOIN analysis a ON m.id = a.mention_id AND m.project = a.project ${pw} GROUP BY a.sentiment`).all(...pp);
+  const sMap = {};
+  sentiments.forEach(s => sMap[s.sentiment] = s.c);
+
+  const actionable = db.prepare(`SELECT COUNT(*) as c FROM mentions m JOIN analysis a ON m.id = a.mention_id AND m.project = a.project ${pw ? pw + ' AND' : 'WHERE'} a.actionable = 1`).get(...pp).c;
+
+  const allAnalysis = db.prepare(`SELECT a.pros, a.cons, a.sentiment, a.summary, a.relevance FROM mentions m JOIN analysis a ON m.id = a.mention_id AND m.project = a.project ${pw}`).all(...pp);
+
+  const prosCount = {};
+  const consCount = {};
+  const samples = [];
+
+  for (const a of allAnalysis) {
+    try { JSON.parse(a.pros).forEach(p => { prosCount[p] = (prosCount[p] || 0) + 1; }); } catch {}
+    try { JSON.parse(a.cons).forEach(c => { consCount[c] = (consCount[c] || 0) + 1; }); } catch {}
+    if (a.relevance === 'high' && samples.length < 15) {
+      samples.push({ sentiment: a.sentiment, summary: a.summary });
+    }
+  }
+
+  const topPros = Object.entries(prosCount).sort((a, b) => b[1] - a[1]).slice(0, 15).map(([text, count]) => ({ text, count }));
+  const topCons = Object.entries(consCount).sort((a, b) => b[1] - a[1]).slice(0, 15).map(([text, count]) => ({ text, count }));
+
+  return {
+    total, posts, comments,
+    positive: sMap.positive || 0,
+    negative: sMap.negative || 0,
+    neutral: sMap.neutral || 0,
+    actionable, topPros, topCons, samples,
+  };
+}
+
 export default db;

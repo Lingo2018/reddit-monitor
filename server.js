@@ -364,6 +364,45 @@ app.post('/api/reports/regenerate', auth, async (req, res) => {
   }
 });
 
+// --- Summary Report ---
+app.post('/api/reports/summary', auth, async (req, res) => {
+  const { project } = req.body;
+  if (!project) return res.status(400).json({ error: 'project required' });
+
+  try {
+    const cfg = loadConfig();
+    if (!cfg.ai?.apiKey) return res.status(400).json({ error: 'AI not configured' });
+
+    const proj = cfg.projects.find(p => p.id === project);
+    if (!proj) return res.status(404).json({ error: 'project not found' });
+
+    const { getAllAnalysisStats, saveDailyReport } = await import('./db.js');
+    const { generateSummaryReport } = await import('./analyzer.js');
+
+    const stats = getAllAnalysisStats(project);
+    if (stats.total === 0) return res.status(400).json({ error: 'no data' });
+
+    const report = await generateSummaryReport(cfg.ai, proj, stats);
+    if (!report) return res.status(500).json({ error: 'report generation failed' });
+
+    const today = new Date().toISOString().slice(0, 10);
+    const reportDate = `summary-${today}`;
+    db.prepare('DELETE FROM daily_reports WHERE report_date = ? AND project = ?').run(reportDate, project);
+    saveDailyReport({
+      project, report_date: reportDate,
+      positive_count: stats.positive, negative_count: stats.negative,
+      neutral_count: stats.neutral, total_count: stats.total,
+      actionable_count: stats.actionable,
+      top_pros: JSON.stringify(stats.topPros), top_cons: JSON.stringify(stats.topCons),
+      full_report: report, created_at: new Date().toISOString(),
+    });
+    invalidateAll();
+    res.json({ ok: true, reportDate });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- Poll Log ---
 app.get('/api/poll-log', auth, (req, res) => {
   const limit = Math.min(+(req.query.limit || 20), 100);
