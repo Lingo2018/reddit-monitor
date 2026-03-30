@@ -769,7 +769,7 @@ async function renderConfig() {
           <div class="form-group"><label>${t('projectId')}</label><input class="p-id" value="${esc(p.id || '')}" autocomplete="off"></div>
           <div class="form-group"><label>${t('projectName')}</label><input class="p-name" value="${esc(p.name || '')}" autocomplete="off"></div>
         </div>
-        <div class="form-group"><label>${t('reportRole')}</label><input class="p-role" value="${esc(p.reportRole || '')}" autocomplete="off" placeholder="${t('reportRoleHint')}"></div>
+        <div class="form-group"><label>${t('reportRole')}</label><textarea class="p-role" rows="2" placeholder="${t('reportRoleHint')}">${esc(p.reportRole || '')}</textarea></div>
         <div class="form-group"><label>${t('subreddits')}</label><textarea class="p-subs">${(p.subreddits || []).join('\n')}</textarea></div>
         <div class="form-group"><label>${t('brandKw')} <span style="color:var(--text-muted);font-size:11px">— ${t('comingSoon')}</span></label><textarea class="p-brand" disabled style="opacity:.5;cursor:not-allowed">${(p.keywords?.brand || []).join('\n')}</textarea></div>
         <div class="form-group"><label>${t('industryKw')} <span style="color:var(--text-muted);font-size:11px">— ${t('comingSoon')}</span></label><textarea class="p-industry" disabled style="opacity:.5;cursor:not-allowed">${(p.keywords?.industry || []).join('\n')}</textarea></div>
