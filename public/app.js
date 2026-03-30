@@ -685,10 +685,8 @@ async function renderProducts() {
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
         <h3 style="margin:0">${t('products')} ${proj ? `(${proj})` : ''}</h3>
         <div class="btn-group">
-          <label class="btn btn-primary btn-sm" style="cursor:pointer">
-            ${t('uploadXlsx')}
-            <input type="file" id="xlsx-upload" accept=".xlsx,.xls" style="display:none">
-          </label>
+          <button class="btn btn-primary btn-sm" id="xlsx-upload-btn">${t('uploadXlsx')}</button>
+          <input type="file" id="xlsx-upload" accept=".xlsx,.xls" style="display:none">
           <button class="btn btn-outline btn-sm" id="add-product-btn">${t('addProduct')}</button>
         </div>
       </div>
@@ -714,6 +712,7 @@ async function renderProducts() {
     </div>`;
 
   // Upload handler
+  $('#xlsx-upload-btn').onclick = () => $('#xlsx-upload').click();
   $('#xlsx-upload').onchange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
