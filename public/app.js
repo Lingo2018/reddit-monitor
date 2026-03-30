@@ -482,8 +482,8 @@ async function renderReports() {
   });
 
   $('#gen-summary').onclick = async () => {
-    const proj = currentProject || (projectList[0]?.id);
-    if (!proj) { toast('请先选择项目'); return; }
+    const proj = currentProject || projectList.find(p => p.enabled !== false)?.id;
+    if (!proj) { toast('无可用项目'); return; }
     const btn = $('#gen-summary');
     btn.textContent = '...';
     btn.disabled = true;
@@ -866,13 +866,15 @@ async function renderConfig() {
   };
 
   $('#reanalyze-btn').onclick = async () => {
-    const proj = currentProject || (projectList[0]?.id);
-    if (!proj) { toast('请先选择项目'); return; }
+    const projects = currentProject ? [currentProject] : projectList.filter(p => p.enabled !== false).map(p => p.id);
+    if (!projects.length) { toast('无可用项目'); return; }
     const btn = $('#reanalyze-btn');
     btn.textContent = '...';
     btn.disabled = true;
     try {
-      await api('/reanalyze', { method: 'POST', body: { project: proj } });
+      for (const proj of projects) {
+        await api('/reanalyze', { method: 'POST', body: { project: proj } });
+      }
       clearClientCache();
       toast(t('reanalyzeOk'));
     } catch (e) { toast(e.message); }
