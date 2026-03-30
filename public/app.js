@@ -676,9 +676,13 @@ async function renderUsers() {
 }
 
 // --- Products ---
+function getProjectId() {
+  return currentProject || projectList.find(p => p.enabled !== false)?.id || 'default';
+}
+
 async function renderProducts() {
   app.innerHTML = skeleton(4);
-  const proj = currentProject || projectList.find(p => p.enabled !== false)?.id || '';
+  const proj = getProjectId();
   const res = await api('/products?project=' + proj);
   const products = await res.json();
 
@@ -735,7 +739,7 @@ async function renderProducts() {
   $('#xlsx-upload').onchange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    if (!proj) { proj = projectList.find(p => p.enabled !== false)?.id || 'default'; }
+    const uploadProj = getProjectId();
     toast('上传中...');
     const reader = new FileReader();
     reader.onload = async (ev) => {
@@ -748,7 +752,7 @@ async function renderProducts() {
       }
       const base64 = btoa(binary);
       try {
-        const res = await api('/products/upload', { method: 'POST', body: { project: proj, data: base64 } });
+        const res = await api('/products/upload', { method: 'POST', body: { project: uploadProj, data: base64 } });
         const d = await res.json();
         if (d.error) { toast('Error: ' + d.error); return; }
         if (d.ok) {
