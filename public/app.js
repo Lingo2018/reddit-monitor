@@ -11,7 +11,7 @@ const i18n = {
     loading: '加载中...',
     totalMentions: '总提及', unread: '未读', brand: '品牌', industry: '行业',
     competitor: '竞对', subreddit: 'Subreddit',
-    analyzed: '已分析', actionable: '可执行',
+    analyzed: '已分析', pending: '待分析', allDone: '全部完成', actionable: '可执行',
     positive: '正面', negative: '负面', neutral: '中性',
     hotPosts: '爆款帖',
     last30d: '近30天提及趋势', topSubs: '热门 Subreddit', recentPolls: '轮询日志',
@@ -62,7 +62,7 @@ const i18n = {
     loading: 'Loading...',
     totalMentions: 'Total Mentions', unread: 'Unread', brand: 'Brand', industry: 'Industry',
     competitor: 'Competitor', subreddit: 'Subreddit',
-    analyzed: 'Analyzed', actionable: 'Actionable',
+    analyzed: 'Analyzed', pending: 'Pending', allDone: 'All done', actionable: 'Actionable',
     positive: 'Positive', negative: 'Negative', neutral: 'Neutral',
     hotPosts: 'Hot Posts',
     last30d: 'Mentions (Last 30 Days)', topSubs: 'Top Subreddits', recentPolls: 'Recent Polls',
@@ -289,7 +289,11 @@ async function renderStats() {
   app.innerHTML = `
     <div class="stats-grid">
       <div class="stat-card"><div class="label">${t('totalMentions')}</div><div class="value brand">${d.total}</div></div>
-      <div class="stat-card"><div class="label">${t('analyzed')}</div><div class="value unread">${d.analyzed || 0}</div></div>
+      <div class="stat-card">
+        <div class="label">${t('analyzed')}</div>
+        <div class="value unread">${d.analyzed || 0}</div>
+        ${d.total > 0 ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px">${d.total - (d.analyzed || 0) > 0 ? t('pending') + ': ' + (d.total - (d.analyzed || 0)) : t('allDone')}</div>` : ''}
+      </div>
       <div class="stat-card"><div class="label">${t('positive')}</div><div class="value" style="color:var(--green);text-shadow:0 0 20px rgba(0,230,118,0.3)">${sMap.positive || 0}</div></div>
       <div class="stat-card"><div class="label">${t('negative')}</div><div class="value" style="color:var(--red);text-shadow:0 0 20px rgba(255,61,113,0.3)">${sMap.negative || 0}</div></div>
     </div>
