@@ -149,9 +149,9 @@ async function loadProjects() {
   try {
     const res = await api('/config');
     const cfg = await res.json();
-    projectList = cfg.projects || [];
+    projectList = (cfg.projects || []).filter(p => p.id);
     updateProjectSelector();
-  } catch {}
+  } catch (e) { console.warn('loadProjects failed:', e); }
 }
 
 // --- Client-side cache ---
