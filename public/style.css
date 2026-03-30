@@ -245,8 +245,17 @@ a.reddit-link:hover { color: #fff; text-shadow: 0 0 10px rgba(0,200,255,0.4); }
 .modal-section { margin-bottom: 16px; }
 .modal-section strong { display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px; }
 .modal-section p { font-size: 14px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; color: var(--text-light); }
-.ai-cell { max-width: 350px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ai-cell { max-width: 350px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 .ai-cell:hover { color: var(--primary) !important; }
+.data-row { cursor: pointer; }
+.data-row.row-active { background: rgba(0,200,255,0.05) !important; }
+.expand-row td { padding: 0 !important; border-bottom: 1px solid var(--border) !important; }
+.expand-content { padding: 14px 16px; background: rgba(0,200,255,0.02); border-left: 3px solid var(--primary); animation: expandIn .2s ease; }
+.expand-meta { margin-bottom: 10px; font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 8px; }
+.expand-section { margin-bottom: 10px; }
+.expand-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
+.expand-text { font-size: 13px; line-height: 1.7; color: var(--text-light); white-space: pre-wrap; word-break: break-word; }
+@keyframes expandIn { from { opacity: 0; max-height: 0; } to { opacity: 1; max-height: 500px; } }
 
 /* === Report === */
 .report-content { font-size: 13px; line-height: 1.7; color: var(--text-light); }

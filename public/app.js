@@ -376,16 +376,26 @@ async function renderData() {
       </div>
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">${t('totalResults').replace('{n}', d.total)}</div>
       <table>
-        <thead><tr><th>${t('time')}</th><th>${t('type')}</th><th>${t('sentiment')}</th><th>${t('author')}</th><th>Karma</th><th>${t('title_col')}</th><th>${t('aiSummary')}</th><th>${t('score')}</th></tr></thead>
-        <tbody>${d.rows.map((r, i) => `<tr data-id="${r.id}" data-idx="${i}">
+        <thead><tr><th>${t('time')}</th><th style="min-width:50px">${t('type')}</th><th style="min-width:60px">${t('sentiment')}</th><th>${t('author')}</th><th>Karma</th><th>${t('title_col')}</th><th>${t('aiSummary')}</th><th>${t('score')}</th></tr></thead>
+        <tbody>${d.rows.map((r, i) => `<tr data-id="${r.id}" data-idx="${i}" class="data-row">
           <td style="white-space:nowrap">${fmtUtc(r.created_utc)}</td>
-          <td>${r.type === 'post' ? t('post') : t('comment')}</td>
-          <td>${sentimentBadge(r.sentiment)}</td>
-          <td><a class="reddit-link" href="https://reddit.com/u/${r.author}" target="_blank">u/${r.author}</a></td>
-          <td style="color:var(--text-muted);font-size:12px">${r.total_karma != null ? fmtKarma(r.total_karma) : '-'}</td>
+          <td style="white-space:nowrap">${r.type === 'post' ? t('post') : t('comment')}</td>
+          <td style="white-space:nowrap">${sentimentBadge(r.sentiment)}</td>
+          <td style="white-space:nowrap"><a class="reddit-link" href="https://reddit.com/u/${r.author}" target="_blank">u/${r.author}</a></td>
+          <td style="color:var(--text-muted);font-size:12px;white-space:nowrap">${r.total_karma != null ? fmtKarma(r.total_karma) : '-'}</td>
           <td class="truncate"><a class="reddit-link" href="https://reddit.com${r.permalink}" target="_blank">${esc(r.type === 'comment' ? (r.body?.slice(0, 100) || r.title || '-') : (r.title || '-'))}</a></td>
-          <td class="ai-cell" data-idx="${i}" style="cursor:pointer;color:var(--text-light)">${esc(r.ai_summary || '-')}</td>
+          <td class="ai-cell" data-idx="${i}">${esc(r.ai_summary || '-')}</td>
           <td>${r.score}</td>
+        </tr>
+        <tr class="expand-row" id="expand-${i}" style="display:none">
+          <td colspan="8">
+            <div class="expand-content">
+              <div class="expand-meta">${sentimentBadge(r.sentiment)} <span>u/${r.author}${r.total_karma != null ? ' · karma ' + fmtKarma(r.total_karma) : ''} · r/${r.subreddit} · ${fmtUtc(r.created_utc)}</span></div>
+              ${r.body ? `<div class="expand-section"><div class="expand-label">${t('title_col')}</div><div class="expand-text">${esc(r.body)}</div></div>` : ''}
+              ${r.ai_summary ? `<div class="expand-section"><div class="expand-label">${t('aiSummary')}</div><div class="expand-text">${esc(r.ai_summary)}</div></div>` : ''}
+              <div style="margin-top:8px"><a class="reddit-link" href="https://reddit.com${r.permalink}" target="_blank">Reddit &rarr;</a></div>
+            </div>
+          </td>
         </tr>`).join('')}</tbody>
       </table>
       <div class="pagination">
@@ -393,13 +403,8 @@ async function renderData() {
         <span>${t('page').replace('{p}', d.page).replace('{t}', d.pages || 1)}</span>
         <button class="btn btn-outline btn-sm" id="next-page" ${d.page >= d.pages ? 'disabled' : ''}>${t('nextPage')}</button>
       </div>
-    </div>
-    <div id="detail-modal" class="modal" style="display:none">
-      <div class="modal-content">
-        <div class="modal-close" id="modal-close">&times;</div>
-        <div id="modal-body"></div>
-      </div>
     </div>`;
+
 
   $('#f-apply').onclick = () => {
     dataState.type = $('#f-type').value;
@@ -414,29 +419,23 @@ async function renderData() {
   $('#prev-page').onclick = () => { dataState.page--; renderData(); };
   $('#next-page').onclick = () => { dataState.page++; renderData(); };
 
-  // AI summary expand modal
-  document.querySelectorAll('.ai-cell').forEach(cell => {
-    cell.onclick = () => {
-      const idx = +cell.dataset.idx;
-      const r = d.rows[idx];
-      if (!r) return;
-      const modal = $('#detail-modal');
-      const body = $('#modal-body');
-      body.innerHTML = `
-        <h3 style="margin-bottom:12px">${esc(r.type === 'comment' ? (r.body?.slice(0, 60) || '') : (r.title || ''))}</h3>
-        <div style="margin-bottom:12px">
-          ${sentimentBadge(r.sentiment)}
-          <span style="color:var(--text-muted);margin-left:8px">u/${r.author}${r.total_karma != null ? ' · karma ' + fmtKarma(r.total_karma) : ''} · r/${r.subreddit} · ${fmtUtc(r.created_utc)}</span>
-        </div>
-        ${r.body ? `<div class="modal-section"><strong>${t('title_col')}</strong><p>${esc(r.body)}</p></div>` : ''}
-        ${r.ai_summary ? `<div class="modal-section"><strong>${t('aiSummary')}</strong><p>${esc(r.ai_summary)}</p></div>` : ''}
-        <div style="margin-top:12px"><a class="reddit-link" href="https://reddit.com${r.permalink}" target="_blank">Reddit &rarr;</a></div>
-      `;
-      modal.style.display = 'flex';
+  // AI summary inline expand/collapse
+  document.querySelectorAll('.data-row').forEach(row => {
+    row.onclick = () => {
+      const idx = row.dataset.idx;
+      const expandRow = $(`#expand-${idx}`);
+      if (!expandRow) return;
+      const isOpen = expandRow.style.display !== 'none';
+      // Close all
+      document.querySelectorAll('.expand-row').forEach(r => r.style.display = 'none');
+      document.querySelectorAll('.data-row').forEach(r => r.classList.remove('row-active'));
+      // Toggle clicked
+      if (!isOpen) {
+        expandRow.style.display = 'table-row';
+        row.classList.add('row-active');
+      }
     };
   });
-  $('#modal-close').onclick = () => { $('#detail-modal').style.display = 'none'; };
-  $('#detail-modal').onclick = (e) => { if (e.target.id === 'detail-modal') $('#detail-modal').style.display = 'none'; };
 
   const exportObj = { type: dataState.type, timeRange: dataState.timeRange, search: dataState.search };
   if (currentProject) exportObj.project = currentProject;
