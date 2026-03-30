@@ -728,10 +728,14 @@ async function renderProducts() {
     </div>`;
 
   // Upload handler
-  $('#xlsx-upload-btn').onclick = () => { $('#xlsx-upload').value = ''; $('#xlsx-upload').click(); };
+  $('#xlsx-upload-btn').onclick = () => {
+    if (!proj) { toast('请先在导航栏选择项目'); return; }
+    $('#xlsx-upload').value = '';
+    $('#xlsx-upload').click();
+  };
   $('#xlsx-upload').onchange = async (e) => {
     const file = e.target.files[0];
-    if (!file) return;
+    if (!file || !proj) return;
     toast('上传中...');
     const reader = new FileReader();
     reader.onload = async (ev) => {
@@ -746,6 +750,7 @@ async function renderProducts() {
       try {
         const res = await api('/products/upload', { method: 'POST', body: { project: proj, data: base64 } });
         const d = await res.json();
+        if (d.error) { toast('Error: ' + d.error); return; }
         if (d.ok) {
           clearClientCache();
           toast(t('uploadSuccess').replace('{n}', d.count));

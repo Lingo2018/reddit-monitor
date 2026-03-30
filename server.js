@@ -435,6 +435,7 @@ app.post('/api/products/upload', auth, async (req, res) => {
       if (rows[i] && rows[i].filter((v, j) => j > 0 && v).length > 3) { productRow = i; break; }
     }
 
+    if (!rows[productRow]) return res.status(400).json({ error: 'cannot find product row in file' });
     const productNames = rows[productRow].slice(1).map(n => String(n || '').trim()).filter(Boolean);
     if (!productNames.length) return res.status(400).json({ error: 'no products found in file' });
 
