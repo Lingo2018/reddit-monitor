@@ -384,13 +384,8 @@ async function renderData() {
           <td style="white-space:nowrap"><a class="reddit-link" href="https://reddit.com/u/${r.author}" target="_blank">u/${r.author}</a></td>
           <td style="color:var(--text-muted);font-size:12px;white-space:nowrap">${r.total_karma != null ? fmtKarma(r.total_karma) : '-'}</td>
           <td class="truncate"><a class="reddit-link" href="https://reddit.com${r.permalink}" target="_blank">${esc(r.type === 'comment' ? (r.body?.slice(0, 100) || r.title || '-') : (r.title || '-'))}</a></td>
-          <td class="ai-cell" data-idx="${i}">${esc(r.ai_summary || '-')}</td>
+          <td class="ai-cell" data-idx="${i}"><span class="ai-text">${esc(r.ai_summary || '-')}</span></td>
           <td>${r.score}</td>
-        </tr>
-        <tr class="expand-row" id="expand-${i}" style="display:none">
-          <td colspan="8">
-            <div class="expand-content">${esc(r.ai_summary || '-')}</div>
-          </td>
         </tr>`).join('')}</tbody>
       </table>
       <div class="pagination">
@@ -414,21 +409,11 @@ async function renderData() {
   $('#prev-page').onclick = () => { dataState.page--; renderData(); };
   $('#next-page').onclick = () => { dataState.page++; renderData(); };
 
-  // AI summary inline expand/collapse
-  document.querySelectorAll('.data-row').forEach(row => {
-    row.onclick = () => {
-      const idx = row.dataset.idx;
-      const expandRow = $(`#expand-${idx}`);
-      if (!expandRow) return;
-      const isOpen = expandRow.style.display !== 'none';
-      // Close all
-      document.querySelectorAll('.expand-row').forEach(r => r.style.display = 'none');
-      document.querySelectorAll('.data-row').forEach(r => r.classList.remove('row-active'));
-      // Toggle clicked
-      if (!isOpen) {
-        expandRow.style.display = 'table-row';
-        row.classList.add('row-active');
-      }
+  // AI summary cell expand/collapse
+  document.querySelectorAll('.ai-cell').forEach(cell => {
+    cell.onclick = (e) => {
+      e.stopPropagation();
+      cell.classList.toggle('ai-expanded');
     };
   });
 
