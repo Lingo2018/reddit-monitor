@@ -50,7 +50,9 @@ const i18n = {
     totalActivity: '总互动', posts: '帖子', comments: '评论', avgScore: '平均分',
     firstSeen: '首次出现', lastSeen: '最近活跃', accountAge: '账龄',
     genSummary: '生成汇总报告', reportGenerated: '报告已生成',
-    products: '产品', uploadXlsx: '上传产品表格', addProduct: '+ 手动添加', deleteConfirm: '确定删除？',
+    products: '产品', uploadXlsx: '上传产品表格', addProduct: '+ 手动添加',
+    selectAll: '全选', batchDelete: '批量删除', batchDeleteConfirm: '确定删除选中的 {n} 个产品？',
+    deleteOneConfirm: '确定删除「{name}」？',
     productName: '产品名称', productSpecs: '参数', specKey: '参数名', specVal: '参数值', addSpec: '+ 添加参数',
     editProduct: '编辑',
     uploadSuccess: '导入成功，共 {n} 个产品', newItems: '新增', updatedItems: '更新',
@@ -107,7 +109,9 @@ const i18n = {
     totalActivity: 'Total', posts: 'Posts', comments: 'Comments', avgScore: 'Avg Score',
     firstSeen: 'First Seen', lastSeen: 'Last Active', accountAge: 'Account Age',
     genSummary: 'Generate Summary Report', reportGenerated: 'Report generated',
-    products: 'Products', uploadXlsx: 'Upload Specs XLSX', addProduct: '+ Add Product', deleteConfirm: 'Delete?',
+    products: 'Products', uploadXlsx: 'Upload Specs XLSX', addProduct: '+ Add Product',
+    selectAll: 'Select All', batchDelete: 'Delete Selected', batchDeleteConfirm: 'Delete {n} selected products?',
+    deleteOneConfirm: 'Delete "{name}"?',
     productName: 'Product Name', productSpecs: 'Specifications', specKey: 'Spec Name', specVal: 'Value', addSpec: '+ Add Spec',
     editProduct: 'Edit',
     uploadSuccess: 'Imported {n} products', newItems: 'new', updatedItems: 'updated',
@@ -714,6 +718,12 @@ async function renderProducts() {
           <button class="btn btn-outline btn-sm" id="cancel-product-btn">${t('all')}</button>
         </div>
       </div>
+      <div id="batch-bar" style="display:none;margin-bottom:12px;padding:10px 14px;background:rgba(255,61,113,0.08);border:1px solid rgba(255,61,113,0.2);border-radius:8px;display:flex;align-items:center;gap:10px">
+        <label style="font-size:13px;cursor:pointer"><input type="checkbox" id="select-all"> ${t('selectAll')}</label>
+        <span id="selected-count" style="font-size:12px;color:var(--text-muted)"></span>
+        <div style="flex:1"></div>
+        <button class="btn btn-sm" id="batch-delete-btn" style="background:var(--red);color:#fff">${t('batchDelete')}</button>
+      </div>
       ${!products.length ? `<p style="color:var(--text-muted)">${t('noProducts')}</p>` : ''}
       <div id="products-container">
         ${products.map(p => {
@@ -722,7 +732,10 @@ async function renderProducts() {
           return `
           <div class="project-card" data-pid="${p.id}">
             <div class="project-header" style="cursor:pointer">
-              <h4 class="toggle-specs" data-pid="${p.id}">${esc(p.name)} <span style="font-size:12px;color:var(--text-muted)">(${specEntries.length} ${t('productSpecs')})</span></h4>
+              <div style="display:flex;align-items:center;gap:8px;flex:1">
+                <input type="checkbox" class="product-check" data-pid="${p.id}" onclick="event.stopPropagation()">
+                <h4 class="toggle-specs" data-pid="${p.id}" style="margin:0">${esc(p.name)} <span style="font-size:12px;color:var(--text-muted)">(${specEntries.length} ${t('productSpecs')})</span></h4>
+              </div>
               <div class="btn-group">
                 <button class="btn btn-outline btn-sm edit-product-btn" data-pid="${p.id}">${t('editProduct')}</button>
                 <button class="btn btn-outline btn-sm del-product-btn" data-pid="${p.id}">${t('deleteProject')}</button>
@@ -735,6 +748,15 @@ async function renderProducts() {
             </div>
           </div>`;
         }).join('')}
+      </div>
+    </div>
+    <div id="confirm-modal" class="modal" style="display:none">
+      <div class="modal-content" style="max-width:380px;text-align:center">
+        <p id="confirm-msg" style="font-size:15px;margin-bottom:20px"></p>
+        <div class="btn-group" style="justify-content:center">
+          <button class="btn btn-outline btn-sm" id="confirm-cancel">${t('all')}</button>
+          <button class="btn btn-sm" id="confirm-ok" style="background:var(--red);color:#fff">${t('deleteProject')}</button>
+        </div>
       </div>
     </div>`;
 
@@ -811,10 +833,54 @@ async function renderProducts() {
     renderProducts();
   };
 
-  // Delete product
+  // Custom confirm modal helper
+  function showConfirm(msg) {
+    return new Promise((resolve) => {
+      const modal = $('#confirm-modal');
+      $('#confirm-msg').textContent = msg;
+      modal.style.display = 'flex';
+      $('#confirm-ok').onclick = () => { modal.style.display = 'none'; resolve(true); };
+      $('#confirm-cancel').onclick = () => { modal.style.display = 'none'; resolve(false); };
+      modal.onclick = (e) => { if (e.target === modal) { modal.style.display = 'none'; resolve(false); } };
+    });
+  }
+
+  // Checkbox state tracking
+  function updateBatchBar() {
+    const checks = document.querySelectorAll('.product-check');
+    const checked = document.querySelectorAll('.product-check:checked');
+    const bar = $('#batch-bar');
+    bar.style.display = checks.length ? 'flex' : 'none';
+    $('#selected-count').textContent = checked.length ? `${checked.length} / ${checks.length}` : '';
+    $('#batch-delete-btn').style.display = checked.length ? '' : 'none';
+    $('#select-all').checked = checks.length > 0 && checked.length === checks.length;
+  }
+
+  document.querySelectorAll('.product-check').forEach(cb => { cb.onchange = updateBatchBar; });
+  $('#select-all').onchange = (e) => {
+    document.querySelectorAll('.product-check').forEach(cb => { cb.checked = e.target.checked; });
+    updateBatchBar();
+  };
+  updateBatchBar();
+
+  // Batch delete
+  $('#batch-delete-btn').onclick = async () => {
+    const ids = [...document.querySelectorAll('.product-check:checked')].map(cb => cb.dataset.pid);
+    if (!ids.length) return;
+    const ok = await showConfirm(t('batchDeleteConfirm').replace('{n}', ids.length));
+    if (!ok) return;
+    for (const id of ids) { await api(`/products/${id}`, { method: 'DELETE' }); }
+    clearClientCache();
+    renderProducts();
+  };
+
+  // Single delete
   document.querySelectorAll('.del-product-btn').forEach(btn => {
-    btn.onclick = async () => {
-      if (!confirm(t('deleteConfirm'))) return;
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      const p = products.find(x => x.id === +btn.dataset.pid);
+      const ok = await showConfirm(t('deleteOneConfirm').replace('{name}', p?.name || ''));
+      if (!ok) return;
       await api(`/products/${btn.dataset.pid}`, { method: 'DELETE' });
       clearClientCache();
       renderProducts();
