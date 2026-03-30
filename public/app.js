@@ -723,13 +723,21 @@ async function renderProducts() {
     </div>`;
 
   // Upload handler
-  $('#xlsx-upload-btn').onclick = () => $('#xlsx-upload').click();
+  $('#xlsx-upload-btn').onclick = () => { $('#xlsx-upload').value = ''; $('#xlsx-upload').click(); };
   $('#xlsx-upload').onchange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    toast('上传中...');
     const reader = new FileReader();
     reader.onload = async (ev) => {
-      const base64 = btoa(String.fromCharCode(...new Uint8Array(ev.target.result)));
+      // chunk base64 encoding for large files
+      const bytes = new Uint8Array(ev.target.result);
+      let binary = '';
+      const chunk = 8192;
+      for (let i = 0; i < bytes.length; i += chunk) {
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+      }
+      const base64 = btoa(binary);
       try {
         const res = await api('/products/upload', { method: 'POST', body: { project: proj, data: base64 } });
         const d = await res.json();
