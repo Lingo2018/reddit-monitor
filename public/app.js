@@ -52,6 +52,7 @@ const i18n = {
     genSummary: '生成汇总报告', reportGenerated: '报告已生成',
     products: '产品', uploadXlsx: '上传产品表格', addProduct: '+ 手动添加', deleteConfirm: '确定删除？',
     productName: '产品名称', productSpecs: '参数', specKey: '参数名', specVal: '参数值', addSpec: '+ 添加参数',
+    editProduct: '编辑',
     uploadSuccess: '导入成功，共 {n} 个产品', noProducts: '暂无产品数据，请上传产品表格或手动添加',
     negativeActions: '负面反馈快速处理', goReply: '去回复',
     noReports: '暂无报告，数据累积后将自动生成每日舆情报告',
@@ -107,6 +108,7 @@ const i18n = {
     genSummary: 'Generate Summary Report', reportGenerated: 'Report generated',
     products: 'Products', uploadXlsx: 'Upload Specs XLSX', addProduct: '+ Add Product', deleteConfirm: 'Delete?',
     productName: 'Product Name', productSpecs: 'Specifications', specKey: 'Spec Name', specVal: 'Value', addSpec: '+ Add Spec',
+    editProduct: 'Edit',
     uploadSuccess: 'Imported {n} products', noProducts: 'No products yet. Upload a specs XLSX or add manually.',
     negativeActions: 'Negative Feedback Actions', goReply: 'Reply',
     noReports: 'No reports yet. Daily reports will be auto-generated once data accumulates.',
@@ -708,15 +710,18 @@ async function renderProducts() {
           const specEntries = Object.entries(specs);
           return `
           <div class="project-card" data-pid="${p.id}">
-            <div class="project-header">
-              <h4>${esc(p.name)}</h4>
-              <button class="btn btn-outline btn-sm del-product-btn" data-pid="${p.id}">${t('deleteProject')}</button>
+            <div class="project-header" style="cursor:pointer">
+              <h4 class="toggle-specs" data-pid="${p.id}">${esc(p.name)} <span style="font-size:12px;color:var(--text-muted)">(${specEntries.length} ${t('productSpecs')})</span></h4>
+              <div class="btn-group">
+                <button class="btn btn-outline btn-sm edit-product-btn" data-pid="${p.id}">${t('editProduct')}</button>
+                <button class="btn btn-outline btn-sm del-product-btn" data-pid="${p.id}">${t('deleteProject')}</button>
+              </div>
             </div>
-            <table style="font-size:12px">
-              <tbody>${specEntries.slice(0, 8).map(([k, v]) => `<tr><td style="color:var(--text-muted);width:140px;white-space:nowrap">${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}
-              ${specEntries.length > 8 ? `<tr><td colspan="2" style="color:var(--text-muted);cursor:pointer" class="show-all-specs" data-pid="${p.id}">... ${t('all')} ${specEntries.length} ${t('productSpecs')} (${t('filter')})</td></tr>` : ''}
-              </tbody>
-            </table>
+            <div class="specs-body" id="specs-${p.id}" style="display:none">
+              <table style="font-size:12px">
+                <tbody>${specEntries.map(([k, v]) => `<tr><td style="color:var(--text-muted);width:140px;white-space:nowrap">${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}</tbody>
+              </table>
+            </div>
           </div>`;
         }).join('')}
       </div>
@@ -791,18 +796,56 @@ async function renderProducts() {
     };
   });
 
-  // Show all specs
-  document.querySelectorAll('.show-all-specs').forEach(td => {
-    td.onclick = () => {
-      const pid = td.dataset.pid;
-      const p = products.find(x => x.id === +pid);
+  // Toggle specs
+  document.querySelectorAll('.toggle-specs').forEach(h => {
+    h.onclick = () => {
+      const body = $(`#specs-${h.dataset.pid}`);
+      if (body) body.style.display = body.style.display === 'none' ? 'block' : 'none';
+    };
+  });
+
+  // Edit product
+  document.querySelectorAll('.edit-product-btn').forEach(btn => {
+    btn.onclick = () => {
+      const pid = +btn.dataset.pid;
+      const p = products.find(x => x.id === pid);
       if (!p) return;
       const specs = JSON.parse(p.specs || '{}');
-      const card = td.closest('.project-card');
-      const tbody = card.querySelector('tbody');
-      tbody.innerHTML = Object.entries(specs).map(([k, v]) =>
-        `<tr><td style="color:var(--text-muted);width:140px;white-space:nowrap">${esc(k)}</td><td>${esc(v)}</td></tr>`
-      ).join('');
+      const body = $(`#specs-${pid}`);
+      body.style.display = 'block';
+      body.innerHTML = `
+        <div class="form-group"><label>${t('productName')}</label><input id="edit-name-${pid}" value="${esc(p.name)}" autocomplete="off"></div>
+        <div id="edit-specs-${pid}">
+          ${Object.entries(specs).map(([k, v]) => `<div class="form-row" style="margin-bottom:4px"><div class="form-group" style="margin:0"><input class="spec-key" value="${esc(k)}" autocomplete="off"></div><div class="form-group" style="margin:0"><input class="spec-val" value="${esc(v)}" autocomplete="off"></div></div>`).join('')}
+        </div>
+        <div class="btn-group" style="margin-top:8px">
+          <button class="btn btn-outline btn-sm add-edit-spec" data-pid="${pid}">${t('addSpec')}</button>
+          <button class="btn btn-primary btn-sm save-edit-btn" data-pid="${pid}">${t('saveConfig')}</button>
+        </div>`;
+
+      body.querySelector('.add-edit-spec').onclick = () => {
+        const container = $(`#edit-specs-${pid}`);
+        const row = document.createElement('div');
+        row.className = 'form-row';
+        row.style.marginBottom = '4px';
+        row.innerHTML = `<div class="form-group" style="margin:0"><input class="spec-key" placeholder="${t('specKey')}" autocomplete="off"></div><div class="form-group" style="margin:0"><input class="spec-val" placeholder="${t('specVal')}" autocomplete="off"></div>`;
+        container.appendChild(row);
+      };
+
+      body.querySelector('.save-edit-btn').onclick = async () => {
+        const name = $(`#edit-name-${pid}`).value.trim();
+        if (!name) return;
+        const newSpecs = {};
+        $(`#edit-specs-${pid}`).querySelectorAll('.form-row').forEach(row => {
+          const k = row.querySelector('.spec-key').value.trim();
+          const v = row.querySelector('.spec-val').value.trim();
+          if (k) newSpecs[k] = v;
+        });
+        await api(`/products/${pid}`, { method: 'PUT', body: { name, specs: newSpecs } });
+        clearClientCache();
+        toast(t('configSaved'));
+        renderProducts();
+      };
     };
   });
 }
