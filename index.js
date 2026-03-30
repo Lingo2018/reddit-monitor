@@ -1,7 +1,7 @@
 import { loadConfig } from './config.js';
 import { createFetcher, createKookeeyFetcher } from './fetcher.js';
 import db from './db.js';
-import { saveMentions, logPoll, logCommentRate, getUnanalyzedMentions, saveAnalysisBatch, getDailyAnalysisStats, saveDailyReport, getStaleUsers, saveUsers } from './db.js';
+import { saveMentions, logPoll, logCommentRate, getUnanalyzedMentions, saveAnalysisBatch, getDailyAnalysisStats, saveDailyReport, getStaleUsers, saveUsers, getProductsForPrompt } from './db.js';
 import { analyzeBatch, generateDailyReport } from './analyzer.js';
 import app from './server.js';
 
@@ -68,8 +68,9 @@ async function runAnalysis(config) {
       const unanalyzed = getUnanalyzedMentions(project.id, 15);
       if (!unanalyzed.length) break;
 
-      log(`  [${project.id}] AI 分析 ${unanalyzed.length} 条...`);
-      const results = await analyzeBatch(config.ai, unanalyzed, project.reportRole);
+      const productInfo = getProductsForPrompt(project.id);
+      log(`  [${project.id}] AI 分析 ${unanalyzed.length} 条...${productInfo ? ' (含产品知识库)' : ''}`);
+      const results = await analyzeBatch(config.ai, unanalyzed, project.reportRole, productInfo);
       if (results.length) {
         saveAnalysisBatch(results);
         totalAnalyzed += results.length;
@@ -98,8 +99,9 @@ async function checkDailyReport(config) {
     const stats = getDailyAnalysisStats(project.id, yesterday);
     if (stats.total === 0) { log(`  [${project.id}] ${yesterday} 无数据，跳过报告`); continue; }
 
+    const productInfo = getProductsForPrompt(project.id);
     log(`  [${project.id}] 生成 ${yesterday} 舆情日报...`);
-    const report = await generateDailyReport(config.ai, project, stats);
+    const report = await generateDailyReport(config.ai, project, stats, productInfo);
     if (report) {
       saveDailyReport({
         project: project.id,

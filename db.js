@@ -256,6 +256,46 @@ export function saveDailyReport(report) {
   return insertReport.run(report);
 }
 
+// --- Products table ---
+db.exec(`
+  CREATE TABLE IF NOT EXISTS products (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project TEXT NOT NULL,
+    name TEXT NOT NULL,
+    specs TEXT DEFAULT '{}',
+    created_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_products_project ON products(project);
+`);
+
+export function getProducts(project) {
+  return project
+    ? db.prepare('SELECT * FROM products WHERE project = ? ORDER BY name').all(project)
+    : db.prepare('SELECT * FROM products ORDER BY project, name').all();
+}
+
+export function addProduct(product) {
+  return db.prepare('INSERT INTO products (project, name, specs, created_at) VALUES (@project, @name, @specs, @created_at)').run(product);
+}
+
+export function updateProduct(id, data) {
+  return db.prepare('UPDATE products SET name = @name, specs = @specs WHERE id = @id').run({ id, ...data });
+}
+
+export function deleteProduct(id) {
+  return db.prepare('DELETE FROM products WHERE id = ?').run(id);
+}
+
+export function getProductsForPrompt(project) {
+  const products = db.prepare('SELECT name, specs FROM products WHERE project = ?').all(project);
+  if (!products.length) return '';
+  return products.map(p => {
+    const specs = JSON.parse(p.specs || '{}');
+    const specLines = Object.entries(specs).map(([k, v]) => `  ${k}: ${v}`).join('\n');
+    return `【${p.name}】\n${specLines}`;
+  }).join('\n\n');
+}
+
 export function getAllAnalysisStats(project) {
   const pw = project ? 'WHERE m.project = ?' : '';
   const pp = project ? [project] : [];

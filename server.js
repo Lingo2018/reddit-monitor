@@ -5,13 +5,13 @@ import zlib from 'zlib';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { loadConfig, saveConfig, getConfigForUI } from './config.js';
-import db from './db.js';
+import db, { getProducts, addProduct, updateProduct, deleteProduct } from './db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const JWT_SECRET = crypto.randomBytes(32).toString('hex');
 const app = express();
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 // --- Gzip compression ---
 app.use((req, res, next) => {
@@ -351,19 +351,22 @@ app.post('/api/reports/regenerate', auth, async (req, res) => {
 
     const isSummary = date.startsWith('summary');
 
+    const { getProductsForPrompt } = await import('./db.js');
+    const productInfo = getProductsForPrompt(project);
+
     let stats, report;
     if (isSummary) {
-      const { getAllAnalysisStats, saveDailyReport } = await import('./db.js');
+      const { getAllAnalysisStats } = await import('./db.js');
       const { generateSummaryReport } = await import('./analyzer.js');
       stats = getAllAnalysisStats(project);
       if (stats.total === 0) return res.status(400).json({ error: 'no data' });
-      report = await generateSummaryReport(cfg.ai, proj, stats);
+      report = await generateSummaryReport(cfg.ai, proj, stats, productInfo);
     } else {
-      const { getDailyAnalysisStats, saveDailyReport } = await import('./db.js');
+      const { getDailyAnalysisStats } = await import('./db.js');
       const { generateDailyReport } = await import('./analyzer.js');
       stats = getDailyAnalysisStats(project, date);
       if (stats.total === 0) return res.status(400).json({ error: 'no data for this date' });
-      report = await generateDailyReport(cfg.ai, proj, stats);
+      report = await generateDailyReport(cfg.ai, proj, stats, productInfo);
     }
 
     if (!report) return res.status(500).json({ error: 'report generation failed' });
@@ -380,6 +383,90 @@ app.post('/api/reports/regenerate', auth, async (req, res) => {
     });
     invalidateAll();
     res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- Products ---
+app.get('/api/products', auth, (req, res) => {
+  const { project } = req.query;
+  res.json(getProducts(project));
+});
+
+app.post('/api/products', auth, (req, res) => {
+  const { project, name, specs } = req.body;
+  if (!project || !name) return res.status(400).json({ error: 'project and name required' });
+  addProduct({ project, name, specs: JSON.stringify(specs || {}), created_at: new Date().toISOString() });
+  invalidateAll();
+  res.json({ ok: true });
+});
+
+app.put('/api/products/:id', auth, (req, res) => {
+  const { name, specs } = req.body;
+  updateProduct(+req.params.id, { name, specs: JSON.stringify(specs || {}) });
+  invalidateAll();
+  res.json({ ok: true });
+});
+
+app.delete('/api/products/:id', auth, (req, res) => {
+  deleteProduct(+req.params.id);
+  invalidateAll();
+  res.json({ ok: true });
+});
+
+app.post('/api/products/upload', auth, async (req, res) => {
+  try {
+    const { default: XLSX } = await import('xlsx');
+    const { addProduct } = await import('./db.js');
+    const { project, data } = req.body; // data is base64 encoded xlsx
+    if (!project || !data) return res.status(400).json({ error: 'project and data required' });
+
+    const buf = Buffer.from(data, 'base64');
+    const wb = XLSX.read(buf);
+    // Try Specifications sheet first, fallback to first sheet
+    const sheetName = wb.SheetNames.includes('Specifications') ? 'Specifications' : wb.SheetNames[0];
+    const ws = wb.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+    // Find product names row (row with most non-null values starting from col 1)
+    let productRow = 1;
+    for (let i = 0; i < Math.min(5, rows.length); i++) {
+      if (rows[i] && rows[i].filter((v, j) => j > 0 && v).length > 3) { productRow = i; break; }
+    }
+
+    const productNames = rows[productRow].slice(1).map(n => String(n || '').trim()).filter(Boolean);
+    if (!productNames.length) return res.status(400).json({ error: 'no products found in file' });
+
+    // Parse specs: each row after productRow where col 0 has a spec name
+    let added = 0;
+    const productsSpecs = {};
+    productNames.forEach(n => { productsSpecs[n] = {}; });
+
+    for (let i = productRow + 1; i < rows.length; i++) {
+      const row = rows[i];
+      const specName = String(row?.[0] || '').trim();
+      if (!specName || specName === 'Basic Information' || specName === 'Display' || specName === 'Camera' || specName === 'Connectivity' || specName === 'Sensors' || specName === 'Others' || specName === 'Accessories') continue;
+
+      for (let j = 0; j < productNames.length; j++) {
+        const val = row?.[j + 1];
+        if (val !== undefined && val !== null && String(val).trim()) {
+          productsSpecs[productNames[j]][specName] = String(val).trim();
+        }
+      }
+    }
+
+    // Delete existing products for this project, then insert new
+    db.prepare('DELETE FROM products WHERE project = ?').run(project);
+    for (const [name, specs] of Object.entries(productsSpecs)) {
+      if (Object.keys(specs).length > 0) {
+        addProduct({ project, name, specs: JSON.stringify(specs), created_at: new Date().toISOString() });
+        added++;
+      }
+    }
+
+    invalidateAll();
+    res.json({ ok: true, count: added });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -410,13 +497,14 @@ app.post('/api/reports/summary', auth, async (req, res) => {
     const proj = cfg.projects.find(p => p.id === project);
     if (!proj) return res.status(404).json({ error: 'project not found' });
 
-    const { getAllAnalysisStats, saveDailyReport } = await import('./db.js');
+    const { getAllAnalysisStats, saveDailyReport, getProductsForPrompt } = await import('./db.js');
     const { generateSummaryReport } = await import('./analyzer.js');
 
     const stats = getAllAnalysisStats(project);
     if (stats.total === 0) return res.status(400).json({ error: 'no data' });
 
-    const report = await generateSummaryReport(cfg.ai, proj, stats);
+    const productInfo = getProductsForPrompt(project);
+    const report = await generateSummaryReport(cfg.ai, proj, stats, productInfo);
     if (!report) return res.status(500).json({ error: 'report generation failed' });
 
     const today = new Date().toISOString().slice(0, 10);

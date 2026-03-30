@@ -50,6 +50,9 @@ const i18n = {
     totalActivity: '总互动', posts: '帖子', comments: '评论', avgScore: '平均分',
     firstSeen: '首次出现', lastSeen: '最近活跃', accountAge: '账龄',
     genSummary: '生成汇总报告', reportGenerated: '报告已生成',
+    products: '产品', uploadXlsx: '上传产品表格', addProduct: '+ 手动添加', deleteConfirm: '确定删除？',
+    productName: '产品名称', productSpecs: '参数', specKey: '参数名', specVal: '参数值', addSpec: '+ 添加参数',
+    uploadSuccess: '导入成功，共 {n} 个产品', noProducts: '暂无产品数据，请上传产品表格或手动添加',
     negativeActions: '负面反馈快速处理', goReply: '去回复',
     noReports: '暂无报告，数据累积后将自动生成每日舆情报告',
     reportDate: '日期', reportTotal: '总数', reportSentiment: '情感分布',
@@ -102,6 +105,9 @@ const i18n = {
     totalActivity: 'Total', posts: 'Posts', comments: 'Comments', avgScore: 'Avg Score',
     firstSeen: 'First Seen', lastSeen: 'Last Active', accountAge: 'Account Age',
     genSummary: 'Generate Summary Report', reportGenerated: 'Report generated',
+    products: 'Products', uploadXlsx: 'Upload Specs XLSX', addProduct: '+ Add Product', deleteConfirm: 'Delete?',
+    productName: 'Product Name', productSpecs: 'Specifications', specKey: 'Spec Name', specVal: 'Value', addSpec: '+ Add Spec',
+    uploadSuccess: 'Imported {n} products', noProducts: 'No products yet. Upload a specs XLSX or add manually.',
     negativeActions: 'Negative Feedback Actions', goReply: 'Reply',
     noReports: 'No reports yet. Daily reports will be auto-generated once data accumulates.',
     reportDate: 'Date', reportTotal: 'Total', reportSentiment: 'Sentiment',
@@ -120,6 +126,7 @@ function updateNav() {
   $('#nav-data').textContent = t('data');
   $('#nav-reports').textContent = t('reports');
   $('#nav-users').textContent = t('users');
+  $('#nav-products').textContent = t('products');
   $('#nav-config').textContent = t('config');
   $('#nav-logout').textContent = t('logout');
   $('#lang-btn').textContent = t('langSwitch');
@@ -197,6 +204,7 @@ function route() {
   else if (hash === 'data') renderData();
   else if (hash === 'reports') renderReports();
   else if (hash === 'users') renderUsers();
+  else if (hash === 'products') renderProducts();
   else if (hash === 'config') renderConfig();
   else if (hash.startsWith('report/')) renderReportDetail(hash.slice(7));
 }
@@ -663,6 +671,101 @@ async function renderUsers() {
   $('#u-refresh').onclick = async () => { clearClientCache(); await api('/refresh', { method: 'POST' }).catch(()=>{}); renderUsers(); };
   $('#u-prev').onclick = () => { userState.page--; renderUsers(); };
   $('#u-next').onclick = () => { userState.page++; renderUsers(); };
+}
+
+// --- Products ---
+async function renderProducts() {
+  app.innerHTML = skeleton(4);
+  const proj = currentProject || projectList.find(p => p.enabled !== false)?.id || '';
+  const res = await api('/products?project=' + proj);
+  const products = await res.json();
+
+  app.innerHTML = `
+    <div class="section">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+        <h3 style="margin:0">${t('products')} ${proj ? `(${proj})` : ''}</h3>
+        <div class="btn-group">
+          <label class="btn btn-primary btn-sm" style="cursor:pointer">
+            ${t('uploadXlsx')}
+            <input type="file" id="xlsx-upload" accept=".xlsx,.xls" style="display:none">
+          </label>
+          <button class="btn btn-outline btn-sm" id="add-product-btn">${t('addProduct')}</button>
+        </div>
+      </div>
+      ${!products.length ? `<p style="color:var(--text-muted)">${t('noProducts')}</p>` : ''}
+      <div id="products-container">
+        ${products.map(p => {
+          const specs = JSON.parse(p.specs || '{}');
+          const specEntries = Object.entries(specs);
+          return `
+          <div class="project-card" data-pid="${p.id}">
+            <div class="project-header">
+              <h4>${esc(p.name)}</h4>
+              <button class="btn btn-outline btn-sm del-product-btn" data-pid="${p.id}">${t('deleteProject')}</button>
+            </div>
+            <table style="font-size:12px">
+              <tbody>${specEntries.slice(0, 8).map(([k, v]) => `<tr><td style="color:var(--text-muted);width:140px;white-space:nowrap">${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}
+              ${specEntries.length > 8 ? `<tr><td colspan="2" style="color:var(--text-muted);cursor:pointer" class="show-all-specs" data-pid="${p.id}">... ${t('all')} ${specEntries.length} ${t('productSpecs')} (${t('filter')})</td></tr>` : ''}
+              </tbody>
+            </table>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+
+  // Upload handler
+  $('#xlsx-upload').onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(ev.target.result)));
+      try {
+        const res = await api('/products/upload', { method: 'POST', body: { project: proj, data: base64 } });
+        const d = await res.json();
+        if (d.ok) {
+          clearClientCache();
+          toast(t('uploadSuccess').replace('{n}', d.count));
+          renderProducts();
+        } else { toast(d.error || 'upload failed'); }
+      } catch (err) { toast(err.message); }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  // Add product manually
+  $('#add-product-btn').onclick = async () => {
+    const name = prompt(t('productName'));
+    if (!name) return;
+    await api('/products', { method: 'POST', body: { project: proj, name, specs: {} } });
+    clearClientCache();
+    renderProducts();
+  };
+
+  // Delete product
+  document.querySelectorAll('.del-product-btn').forEach(btn => {
+    btn.onclick = async () => {
+      if (!confirm(t('deleteConfirm'))) return;
+      await api(`/products/${btn.dataset.pid}`, { method: 'DELETE' });
+      clearClientCache();
+      renderProducts();
+    };
+  });
+
+  // Show all specs
+  document.querySelectorAll('.show-all-specs').forEach(td => {
+    td.onclick = () => {
+      const pid = td.dataset.pid;
+      const p = products.find(x => x.id === +pid);
+      if (!p) return;
+      const specs = JSON.parse(p.specs || '{}');
+      const card = td.closest('.project-card');
+      const tbody = card.querySelector('tbody');
+      tbody.innerHTML = Object.entries(specs).map(([k, v]) =>
+        `<tr><td style="color:var(--text-muted);width:140px;white-space:nowrap">${esc(k)}</td><td>${esc(v)}</td></tr>`
+      ).join('');
+    };
+  });
 }
 
 // --- Config ---

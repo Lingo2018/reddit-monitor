@@ -103,7 +103,7 @@ async function callLLM(config, prompt, systemPrompt) {
  * @param {array} items - mentions to analyze
  * @param {string} reportRole - custom analyst role, e.g. "Unihertz公关策略师"
  */
-export async function analyzeBatch(config, items, reportRole) {
+export async function analyzeBatch(config, items, reportRole, productInfo) {
   if (!items.length) return [];
 
   const itemsText = items.map((item, i) =>
@@ -125,9 +125,10 @@ export async function analyzeBatch(config, items, reportRole) {
 - actionable: boolean（是否包含可执行的产品反馈）
 - summary: string（一句话中文摘要）
 
-摘要务必简洁。聚焦产品相关洞察。所有内容用中文。`;
+摘要务必简洁。聚焦产品相关洞察。所有内容用中文。${productInfo ? '\n\n如果评论提到了具体产品型号，请在摘要中标注对应产品名称。' : ''}`;
 
-  const prompt = `分析以下 ${items.length} 条 Reddit 帖子/评论：\n\n${itemsText}`;
+  const productContext = productInfo ? `\n\n我方产品线信息：\n${productInfo}\n` : '';
+  const prompt = `分析以下 ${items.length} 条 Reddit 帖子/评论：${productContext}\n${itemsText}`;
 
   try {
     const raw = await callLLM(config, prompt, systemPrompt);
@@ -157,7 +158,7 @@ export async function analyzeBatch(config, items, reportRole) {
  * @param {object} project - project config (id, name, reportRole)
  * @param {object} stats - daily analysis stats
  */
-export async function generateDailyReport(config, project, stats) {
+export async function generateDailyReport(config, project, stats, productInfo) {
   const role = project.reportRole
     ? `你是${project.reportRole}。从${project.reportRole}的专业视角撰写每日 Reddit 社媒舆情监控报告。`
     : '你是品牌舆情分析师，撰写每日 Reddit 社媒舆情监控报告。';
@@ -188,10 +189,11 @@ ${stats.samples.map((s, i) => `${i + 1}. [${s.sentiment}] ${s.summary}${s.permal
 需要关注的负面反馈（附链接）：
 ${(stats.negativeItems || []).map((n, i) => `${i + 1}. ${n.summary} (u/${n.author}) → https://reddit.com${n.permalink}`).join('\n') || '无'}
 
+${productInfo ? `\n我方产品线信息（用于匹配用户讨论的具体产品）：\n${productInfo}\n` : ''}
 请按以下结构撰写报告：
 1. 今日概况（核心指标一览）
-2. 正面反馈亮点
-3. 负面反馈与风险预警（请保留原始 Reddit 链接，方便直接跳转回复）
+2. 正面反馈亮点${productInfo ? '（标注涉及的具体产品型号）' : ''}
+3. 负面反馈与风险预警（请保留原始 Reddit 链接，方便直接跳转回复）${productInfo ? '（标注涉及的具体产品型号）' : ''}
 4. 运营建议与行动项
 5. 总结`;
 
@@ -208,7 +210,7 @@ ${(stats.negativeItems || []).map((n, i) => `${i + 1}. ${n.summary} (u/${n.autho
 /**
  * Generate summary report for all accumulated data
  */
-export async function generateSummaryReport(config, project, stats) {
+export async function generateSummaryReport(config, project, stats, productInfo) {
   const role = project.reportRole
     ? `你是${project.reportRole}。从${project.reportRole}的专业视角撰写 Reddit 社媒舆情汇总报告。`
     : '你是品牌舆情分析师，撰写 Reddit 社媒舆情汇总报告。';
@@ -236,10 +238,11 @@ ${stats.samples.map((s, i) => `${i + 1}. [${s.sentiment}] ${s.summary}${s.permal
 需要关注的负面反馈（附链接）：
 ${(stats.negativeItems || []).map((n, i) => `${i + 1}. ${n.summary} (u/${n.author}) → https://reddit.com${n.permalink}`).join('\n') || '无'}
 
+${productInfo ? `\n我方产品线信息：\n${productInfo}\n` : ''}
 请按以下结构撰写汇总报告（在负面反馈部分请保留 Reddit 原始链接，方便直接跳转回复）：
 1. 整体舆情画像（数据总览 + 情感趋势判断）
-2. 品牌口碑核心优势（用户最认可的方面）
-3. 核心风险与高频痛点（按严重程度排序）
+2. 品牌口碑核心优势${productInfo ? '（按产品型号分类）' : ''}
+3. 核心风险与高频痛点（按严重程度排序）${productInfo ? '（标注涉及的具体产品型号）' : ''}
 4. 竞对对比洞察（如数据中有竞品讨论）
 5. 战略建议（产品、运营、公关、社区维护）
 6. 高价值用户运营建议
