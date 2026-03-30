@@ -821,11 +821,16 @@ async function renderProducts() {
     };
   });
 
-  // Toggle specs
+  // Toggle specs (click product name)
   document.querySelectorAll('.toggle-specs').forEach(h => {
     h.onclick = () => {
-      const body = $(`#specs-${h.dataset.pid}`);
-      if (body) body.style.display = body.style.display === 'none' ? 'block' : 'none';
+      const pid = h.dataset.pid;
+      const body = $(`#specs-${pid}`);
+      if (!body) return;
+      const isOpen = body.style.display !== 'none';
+      // Close all
+      document.querySelectorAll('.specs-body').forEach(b => b.style.display = 'none');
+      if (!isOpen) body.style.display = 'block';
     };
   });
 
@@ -835,20 +840,35 @@ async function renderProducts() {
       const pid = +btn.dataset.pid;
       const p = products.find(x => x.id === pid);
       if (!p) return;
-      const specs = JSON.parse(p.specs || '{}');
       const body = $(`#specs-${pid}`);
+      const isEditing = body.dataset.editing === '1';
+
+      if (isEditing) {
+        // Cancel edit — restore read-only view
+        body.dataset.editing = '0';
+        btn.textContent = t('editProduct');
+        const specs = JSON.parse(p.specs || '{}');
+        body.innerHTML = `<table style="font-size:12px"><tbody>${Object.entries(specs).map(([k, v]) => `<tr><td style="color:var(--text-muted);width:140px;white-space:nowrap">${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}</tbody></table>`;
+        return;
+      }
+
+      // Enter edit mode
+      body.dataset.editing = '1';
       body.style.display = 'block';
+      btn.textContent = t('all'); // "取消" uses existing i18n
+      const specs = JSON.parse(p.specs || '{}');
       body.innerHTML = `
         <div class="form-group"><label>${t('productName')}</label><input id="edit-name-${pid}" value="${esc(p.name)}" autocomplete="off"></div>
         <div id="edit-specs-${pid}">
           ${Object.entries(specs).map(([k, v]) => `<div class="form-row" style="margin-bottom:4px"><div class="form-group" style="margin:0"><input class="spec-key" value="${esc(k)}" autocomplete="off"></div><div class="form-group" style="margin:0"><input class="spec-val" value="${esc(v)}" autocomplete="off"></div></div>`).join('')}
         </div>
         <div class="btn-group" style="margin-top:8px">
-          <button class="btn btn-outline btn-sm add-edit-spec" data-pid="${pid}">${t('addSpec')}</button>
-          <button class="btn btn-primary btn-sm save-edit-btn" data-pid="${pid}">${t('saveConfig')}</button>
+          <button class="btn btn-outline btn-sm add-edit-spec">${t('addSpec')}</button>
+          <button class="btn btn-primary btn-sm save-edit-btn">${t('saveConfig')}</button>
         </div>`;
 
-      body.querySelector('.add-edit-spec').onclick = () => {
+      body.querySelector('.add-edit-spec').onclick = (e) => {
+        e.stopPropagation();
         const container = $(`#edit-specs-${pid}`);
         const row = document.createElement('div');
         row.className = 'form-row';
@@ -857,7 +877,8 @@ async function renderProducts() {
         container.appendChild(row);
       };
 
-      body.querySelector('.save-edit-btn').onclick = async () => {
+      body.querySelector('.save-edit-btn').onclick = async (e) => {
+        e.stopPropagation();
         const name = $(`#edit-name-${pid}`).value.trim();
         if (!name) return;
         const newSpecs = {};
