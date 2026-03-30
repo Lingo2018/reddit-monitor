@@ -729,13 +729,13 @@ async function renderProducts() {
 
   // Upload handler
   $('#xlsx-upload-btn').onclick = () => {
-    if (!proj) { toast('请先在导航栏选择项目'); return; }
     $('#xlsx-upload').value = '';
     $('#xlsx-upload').click();
   };
   $('#xlsx-upload').onchange = async (e) => {
     const file = e.target.files[0];
-    if (!file || !proj) return;
+    if (!file) return;
+    if (!proj) { proj = projectList.find(p => p.enabled !== false)?.id || 'default'; }
     toast('上传中...');
     const reader = new FileReader();
     reader.onload = async (ev) => {
