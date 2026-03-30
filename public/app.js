@@ -50,6 +50,7 @@ const i18n = {
     totalActivity: '总互动', posts: '帖子', comments: '评论', avgScore: '平均分',
     firstSeen: '首次出现', lastSeen: '最近活跃', accountAge: '账龄',
     genSummary: '生成汇总报告', reportGenerated: '报告已生成',
+    negativeActions: '负面反馈快速处理', goReply: '去回复',
     noReports: '暂无报告，数据累积后将自动生成每日舆情报告',
     reportDate: '日期', reportTotal: '总数', reportSentiment: '情感分布',
     viewReport: '查看',
@@ -101,6 +102,7 @@ const i18n = {
     totalActivity: 'Total', posts: 'Posts', comments: 'Comments', avgScore: 'Avg Score',
     firstSeen: 'First Seen', lastSeen: 'Last Active', accountAge: 'Account Age',
     genSummary: 'Generate Summary Report', reportGenerated: 'Report generated',
+    negativeActions: 'Negative Feedback Actions', goReply: 'Reply',
     noReports: 'No reports yet. Daily reports will be auto-generated once data accumulates.',
     reportDate: 'Date', reportTotal: 'Total', reportSentiment: 'Sentiment',
     viewReport: 'View',
@@ -535,6 +537,17 @@ async function renderReportDetail(dateAndParams) {
     </div>
     ${topPros.length ? `<div class="section"><h3>${t('positive')}</h3><ul>${topPros.map(p => `<li>${esc(p.text)} <span style="color:var(--text-muted)">(${p.count})</span></li>`).join('')}</ul></div>` : ''}
     ${topCons.length ? `<div class="section"><h3>${t('negative')}</h3><ul>${topCons.map(c => `<li>${esc(c.text)} <span style="color:var(--text-muted)">(${c.count})</span></li>`).join('')}</ul></div>` : ''}
+    ${(r.negativeItems || []).length ? `<div class="section"><h3>${t('negativeActions')}</h3>
+      <table>
+        <thead><tr><th>${t('type')}</th><th>${t('author')}</th><th>${t('aiSummary')}</th><th></th></tr></thead>
+        <tbody>${r.negativeItems.map(n => `<tr>
+          <td style="white-space:nowrap">${n.type === 'post' ? t('post') : t('comment')}</td>
+          <td style="white-space:nowrap"><a class="reddit-link" href="https://reddit.com/u/${n.author}" target="_blank">u/${n.author}</a></td>
+          <td style="color:var(--text-light)">${esc(n.summary || '-')}</td>
+          <td><a class="btn btn-sm btn-outline" href="https://reddit.com${n.permalink}" target="_blank">${t('goReply')}</a></td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>` : ''}
     <div class="section">
       <div class="report-content">${markdownToHtml(r.full_report || '')}</div>
     </div>`;
@@ -564,6 +577,10 @@ function markdownToHtml(md) {
   md = md.replace(/^### (.+)$/gm, '<h4>$1</h4>');
   md = md.replace(/^## (.+)$/gm, '<h3>$1</h3>');
   md = md.replace(/^# (.+)$/gm, '<h2>$1</h2>');
+
+  // Links: [text](url) and bare URLs
+  md = md.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a class="reddit-link" href="$2" target="_blank">$1</a>');
+  md = md.replace(/(^|[^"=])(https?:\/\/[^\s<)\]]+)/g, '$1<a class="reddit-link" href="$2" target="_blank">$2</a>');
 
   // Bold
   md = md.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');

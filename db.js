@@ -215,7 +215,7 @@ export function getDailyAnalysisStats(project, date) {
   const actionable = db.prepare(`SELECT COUNT(*) as c FROM mentions m JOIN analysis a ON m.id = a.mention_id AND m.project = a.project WHERE m.project = ? AND a.actionable = 1 AND m.discovered_at BETWEEN ? AND ?`).get(project, dayStart, dayEnd)?.c || 0;
 
   // Aggregate pros and cons
-  const allAnalysis = db.prepare(`SELECT a.pros, a.cons, a.sentiment, a.summary, a.relevance FROM mentions m JOIN analysis a ON m.id = a.mention_id AND m.project = a.project WHERE m.project = ? AND m.discovered_at BETWEEN ? AND ?`).all(project, dayStart, dayEnd);
+  const allAnalysis = db.prepare(`SELECT a.pros, a.cons, a.sentiment, a.summary, a.relevance, m.permalink, m.author, m.type FROM mentions m JOIN analysis a ON m.id = a.mention_id AND m.project = a.project WHERE m.project = ? AND m.discovered_at BETWEEN ? AND ?`).all(project, dayStart, dayEnd);
 
   const prosCount = {};
   const consCount = {};
@@ -225,9 +225,15 @@ export function getDailyAnalysisStats(project, date) {
     try { JSON.parse(a.pros).forEach(p => { prosCount[p] = (prosCount[p] || 0) + 1; }); } catch {}
     try { JSON.parse(a.cons).forEach(c => { consCount[c] = (consCount[c] || 0) + 1; }); } catch {}
     if (a.relevance === 'high' && samples.length < 10) {
-      samples.push({ sentiment: a.sentiment, summary: a.summary });
+      samples.push({ sentiment: a.sentiment, summary: a.summary, permalink: a.permalink, author: a.author, type: a.type });
     }
   }
+
+  // Collect negative items with links for actionable follow-up
+  const negativeItems = allAnalysis
+    .filter(a => a.sentiment === 'negative' && a.permalink)
+    .map(a => ({ summary: a.summary, permalink: a.permalink, author: a.author, type: a.type, cons: a.cons }))
+    .slice(0, 20);
 
   const topPros = Object.entries(prosCount).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([text, count]) => ({ text, count }));
   const topCons = Object.entries(consCount).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([text, count]) => ({ text, count }));
@@ -237,7 +243,7 @@ export function getDailyAnalysisStats(project, date) {
     positive: sMap.positive || 0,
     negative: sMap.negative || 0,
     neutral: sMap.neutral || 0,
-    actionable, topPros, topCons, samples,
+    actionable, topPros, topCons, samples, negativeItems: negativeItems || [],
   };
 }
 
@@ -264,7 +270,7 @@ export function getAllAnalysisStats(project) {
 
   const actionable = db.prepare(`SELECT COUNT(*) as c FROM mentions m JOIN analysis a ON m.id = a.mention_id AND m.project = a.project ${pw ? pw + ' AND' : 'WHERE'} a.actionable = 1`).get(...pp).c;
 
-  const allAnalysis = db.prepare(`SELECT a.pros, a.cons, a.sentiment, a.summary, a.relevance FROM mentions m JOIN analysis a ON m.id = a.mention_id AND m.project = a.project ${pw}`).all(...pp);
+  const allAnalysis = db.prepare(`SELECT a.pros, a.cons, a.sentiment, a.summary, a.relevance, m.permalink, m.author, m.type FROM mentions m JOIN analysis a ON m.id = a.mention_id AND m.project = a.project ${pw}`).all(...pp);
 
   const prosCount = {};
   const consCount = {};
@@ -274,9 +280,14 @@ export function getAllAnalysisStats(project) {
     try { JSON.parse(a.pros).forEach(p => { prosCount[p] = (prosCount[p] || 0) + 1; }); } catch {}
     try { JSON.parse(a.cons).forEach(c => { consCount[c] = (consCount[c] || 0) + 1; }); } catch {}
     if (a.relevance === 'high' && samples.length < 15) {
-      samples.push({ sentiment: a.sentiment, summary: a.summary });
+      samples.push({ sentiment: a.sentiment, summary: a.summary, permalink: a.permalink, author: a.author, type: a.type });
     }
   }
+
+  const negativeItems = allAnalysis
+    .filter(a => a.sentiment === 'negative' && a.permalink)
+    .map(a => ({ summary: a.summary, permalink: a.permalink, author: a.author, type: a.type, cons: a.cons }))
+    .slice(0, 30);
 
   const topPros = Object.entries(prosCount).sort((a, b) => b[1] - a[1]).slice(0, 15).map(([text, count]) => ({ text, count }));
   const topCons = Object.entries(consCount).sort((a, b) => b[1] - a[1]).slice(0, 15).map(([text, count]) => ({ text, count }));
@@ -286,7 +297,7 @@ export function getAllAnalysisStats(project) {
     positive: sMap.positive || 0,
     negative: sMap.negative || 0,
     neutral: sMap.neutral || 0,
-    actionable, topPros, topCons, samples,
+    actionable, topPros, topCons, samples, negativeItems,
   };
 }
 

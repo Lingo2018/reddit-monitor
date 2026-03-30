@@ -324,6 +324,16 @@ app.get('/api/reports/:date', auth, (req, res) => {
     row = db.prepare('SELECT * FROM daily_reports WHERE report_date = ? LIMIT 1').get(req.params.date);
   }
   if (!row) return res.status(404).json({ error: 'not found' });
+
+  // Attach negative items with links for this report's project
+  const negatives = db.prepare(`
+    SELECT a.summary, a.sentiment, m.permalink, m.author, m.type
+    FROM analysis a JOIN mentions m ON a.mention_id = m.id AND a.project = m.project
+    WHERE a.project = ? AND a.sentiment = 'negative' AND m.permalink IS NOT NULL
+    ORDER BY a.analyzed_at DESC LIMIT 30
+  `).all(row.project);
+  row.negativeItems = negatives;
+
   res.json(row);
 });
 

@@ -183,12 +183,15 @@ ${stats.topCons.map((c, i) => `${i + 1}. ${c.text}（${c.count} 次提及）`).j
 ${stats.topPros.map((c, i) => `${i + 1}. ${c.text}（${c.count} 次提及）`).join('\n') || '无'}
 
 高相关度评论摘要：
-${stats.samples.map((s, i) => `${i + 1}. [${s.sentiment}] ${s.summary}`).join('\n') || '无'}
+${stats.samples.map((s, i) => `${i + 1}. [${s.sentiment}] ${s.summary}${s.permalink ? ' → https://reddit.com' + s.permalink : ''}`).join('\n') || '无'}
+
+需要关注的负面反馈（附链接）：
+${(stats.negativeItems || []).map((n, i) => `${i + 1}. ${n.summary} (u/${n.author}) → https://reddit.com${n.permalink}`).join('\n') || '无'}
 
 请按以下结构撰写报告：
 1. 今日概况（核心指标一览）
 2. 正面反馈亮点
-3. 负面反馈与风险预警
+3. 负面反馈与风险预警（请保留原始 Reddit 链接，方便直接跳转回复）
 4. 运营建议与行动项
 5. 总结`;
 
@@ -227,9 +230,12 @@ ${stats.topCons.map((c, i) => `${i + 1}. ${c.text}（${c.count} 次）`).join('\
 ${stats.topPros.map((c, i) => `${i + 1}. ${c.text}（${c.count} 次）`).join('\n') || '无'}
 
 高相关度评论摘要：
-${stats.samples.map((s, i) => `${i + 1}. [${s.sentiment}] ${s.summary}`).join('\n') || '无'}
+${stats.samples.map((s, i) => `${i + 1}. [${s.sentiment}] ${s.summary}${s.permalink ? ' → https://reddit.com' + s.permalink : ''}`).join('\n') || '无'}
 
-请按以下结构撰写汇总报告：
+需要关注的负面反馈（附链接）：
+${(stats.negativeItems || []).map((n, i) => `${i + 1}. ${n.summary} (u/${n.author}) → https://reddit.com${n.permalink}`).join('\n') || '无'}
+
+请按以下结构撰写汇总报告（在负面反馈部分请保留 Reddit 原始链接，方便直接跳转回复）：
 1. 整体舆情画像（数据总览 + 情感趋势判断）
 2. 品牌口碑核心优势（用户最认可的方面）
 3. 核心风险与高频痛点（按严重程度排序）
