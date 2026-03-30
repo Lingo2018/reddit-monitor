@@ -688,6 +688,7 @@ function getProjectId() {
 
 async function renderProducts() {
   app.innerHTML = skeleton(4);
+  if (!projectList.length) await loadProjects();
   const proj = getProjectId();
   const res = await api('/products?project=' + proj);
   const products = await res.json();
