@@ -34,7 +34,8 @@ const i18n = {
     pollSetting: '轮询设置', interval: '间隔（分钟）', webPwd: '登录密码',
     aiSetting: 'AI 分析设置', aiEndpoint: 'API 地址', aiKey: 'API Key', aiModel: '模型',
     projects: '监控项目', addProject: '+ 添加项目', deleteProject: '删除',
-    projectId: '项目ID', projectName: '项目名称',
+    projectId: '项目ID', projectName: '项目名称', reportRole: '报告分析师角色', reportRoleHint: '例如：Unihertz公关策略师',
+    regenerateReport: '重新生成',
     brandKw: '品牌关键词（每行一个）', industryKw: '行业关键词（每行一个）',
     competitorKw: '竞对关键词（每行一个）', subreddits: '监控 Subreddit（每行一个）',
     saveConfig: '保存配置', configSaved: '配置已保存，下轮轮询生效',
@@ -82,7 +83,8 @@ const i18n = {
     pollSetting: 'Poll Settings', interval: 'Interval (minutes)', webPwd: 'Web Password',
     aiSetting: 'AI Analysis Settings', aiEndpoint: 'API Endpoint', aiKey: 'API Key', aiModel: 'Model',
     projects: 'Projects', addProject: '+ Add Project', deleteProject: 'Delete',
-    projectId: 'ID', projectName: 'Name',
+    projectId: 'ID', projectName: 'Name', reportRole: 'Report Analyst Role', reportRoleHint: 'e.g. Unihertz PR Strategist',
+    regenerateReport: 'Regenerate',
     brandKw: 'Brand Keywords (one per line)', industryKw: 'Industry Keywords (one per line)',
     competitorKw: 'Competitor Keywords (one per line)', subreddits: 'Subreddits (one per line)',
     saveConfig: 'Save Config', configSaved: 'Config saved! Changes apply on next poll cycle.',
@@ -447,10 +449,30 @@ async function renderReports() {
           <td style="color:var(--red)">${r.negative_count}</td>
           <td style="color:var(--orange)">${r.neutral_count}</td>
           <td>${r.actionable_count}</td>
-          <td><a href="#report/${r.report_date}?p=${r.project}" class="btn btn-sm btn-outline">${t('viewReport')}</a></td>
+          <td>
+            <a href="#report/${r.report_date}?p=${r.project}" class="btn btn-sm btn-outline">${t('viewReport')}</a>
+            <button class="btn btn-sm btn-outline regen-btn" data-date="${r.report_date}" data-project="${r.project}" style="margin-left:4px">${t('regenerateReport')}</button>
+          </td>
         </tr>`).join('')}</tbody>
       </table>
     </div>`;
+
+  document.querySelectorAll('.regen-btn').forEach(btn => {
+    btn.onclick = async () => {
+      btn.textContent = '...';
+      btn.disabled = true;
+      try {
+        await api(`/reports/regenerate`, { method: 'POST', body: { date: btn.dataset.date, project: btn.dataset.project } });
+        clearClientCache();
+        toast(t('configSaved'));
+        renderReports();
+      } catch (e) {
+        toast(t('saveFailed') + e.message);
+        btn.textContent = t('regenerateReport');
+        btn.disabled = false;
+      }
+    };
+  });
 }
 
 async function renderReportDetail(dateAndParams) {
@@ -713,6 +735,7 @@ async function renderConfig() {
           <div class="form-group"><label>${t('projectId')}</label><input class="p-id" value="${esc(p.id || '')}" autocomplete="off"></div>
           <div class="form-group"><label>${t('projectName')}</label><input class="p-name" value="${esc(p.name || '')}" autocomplete="off"></div>
         </div>
+        <div class="form-group"><label>${t('reportRole')}</label><input class="p-role" value="${esc(p.reportRole || '')}" autocomplete="off" placeholder="${t('reportRoleHint')}"></div>
         <div class="form-group"><label>${t('subreddits')}</label><textarea class="p-subs">${(p.subreddits || []).join('\n')}</textarea></div>
         <div class="form-group"><label>${t('brandKw')} <span style="color:var(--text-muted);font-size:11px">— ${t('comingSoon')}</span></label><textarea class="p-brand" disabled style="opacity:.5;cursor:not-allowed">${(p.keywords?.brand || []).join('\n')}</textarea></div>
         <div class="form-group"><label>${t('industryKw')} <span style="color:var(--text-muted);font-size:11px">— ${t('comingSoon')}</span></label><textarea class="p-industry" disabled style="opacity:.5;cursor:not-allowed">${(p.keywords?.industry || []).join('\n')}</textarea></div>
@@ -738,6 +761,7 @@ async function renderConfig() {
     const updatedProjects = [...cards].map(c => ({
       id: c.querySelector('.p-id').value.trim(),
       name: c.querySelector('.p-name').value.trim(),
+      reportRole: c.querySelector('.p-role').value.trim(),
       enabled: c.querySelector('.p-enabled').checked,
       keywords: {
         brand: lines(c.querySelector('.p-brand').value),

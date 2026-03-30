@@ -55,8 +55,7 @@ function buildRequest(config, prompt, systemPrompt) {
 }
 
 async function callLLM(config, prompt, systemPrompt) {
-  let endpoint = config.endpoint.replace(/\/+$/, ''); // trim trailing slash
-  // Auto-append path if user only gave base URL
+  let endpoint = config.endpoint.replace(/\/+$/, '');
   if (!isClaudeFormat(endpoint) && !endpoint.endsWith('/chat/completions')) {
     endpoint += '/chat/completions';
   }
@@ -100,28 +99,35 @@ async function callLLM(config, prompt, systemPrompt) {
 
 /**
  * Analyze a batch of comments/posts
+ * @param {object} config - AI config (endpoint, apiKey, model)
+ * @param {array} items - mentions to analyze
+ * @param {string} reportRole - custom analyst role, e.g. "Unihertz公关策略师"
  */
-export async function analyzeBatch(config, items) {
+export async function analyzeBatch(config, items, reportRole) {
   if (!items.length) return [];
 
   const itemsText = items.map((item, i) =>
     `[${i + 1}] (${item.type}) r/${item.subreddit} | u/${item.author}\n${item.title ? 'Title: ' + item.title + '\n' : ''}${item.body || '(no body)'}`
   ).join('\n---\n');
 
-  const systemPrompt = `You are a brand reputation analyst. Analyze Reddit posts/comments for brand sentiment and product insights.
+  const role = reportRole
+    ? `你是${reportRole}。从${reportRole}的角度分析以下 Reddit 帖子/评论，重点关注与自身品牌相关的舆情、竞对动态和用户需求。`
+    : '你是品牌舆情分析师。分析以下 Reddit 帖子/评论的品牌情感和产品洞察。';
 
-Respond ONLY with a valid JSON array. Each element must have these fields:
-- index: number (1-based, matching input)
+  const systemPrompt = `${role}
+
+请只返回一个合法的 JSON 数组。每个元素必须包含以下字段：
+- index: number（从1开始，对应输入编号）
 - sentiment: "positive" | "negative" | "neutral"
-- relevance: "high" | "medium" | "low" (how relevant to the brand/product)
-- pros: string[] (product strengths mentioned, empty array if none)
-- cons: string[] (product weaknesses/complaints, empty array if none)
-- actionable: boolean (true if contains actionable product feedback)
-- summary: string (one sentence summary in Chinese)
+- relevance: "high" | "medium" | "low"（与品牌/产品的相关度）
+- pros: string[]（提到的产品优点，中文，没有则为空数组）
+- cons: string[]（提到的产品缺点/投诉，中文，没有则为空数组）
+- actionable: boolean（是否包含可执行的产品反馈）
+- summary: string（一句话中文摘要）
 
-Keep summaries concise. Focus on product-related insights.`;
+摘要务必简洁。聚焦产品相关洞察。所有内容用中文。`;
 
-  const prompt = `Analyze these ${items.length} Reddit posts/comments:\n\n${itemsText}`;
+  const prompt = `分析以下 ${items.length} 条 Reddit 帖子/评论：\n\n${itemsText}`;
 
   try {
     const raw = await callLLM(config, prompt, systemPrompt);
@@ -147,37 +153,44 @@ Keep summaries concise. Focus on product-related insights.`;
 
 /**
  * Generate daily sentiment report
+ * @param {object} config - AI config
+ * @param {object} project - project config (id, name, reportRole)
+ * @param {object} stats - daily analysis stats
  */
 export async function generateDailyReport(config, project, stats) {
-  const systemPrompt = `You are a brand reputation analyst writing a daily social media monitoring report in Chinese.
-Write a COMPACT, actionable report in Markdown format. Use tables for data, keep text minimal. No excessive spacing or decoration. Be direct and data-driven.`;
+  const role = project.reportRole
+    ? `你是${project.reportRole}。从${project.reportRole}的专业视角撰写每日 Reddit 社媒舆情监控报告。`
+    : '你是品牌舆情分析师，撰写每日 Reddit 社媒舆情监控报告。';
 
-  const prompt = `Generate a daily Reddit monitoring report for project "${project.name || project.id}".
+  const systemPrompt = `${role}
+要求：全文中文，紧凑实用，Markdown 格式。用表格呈现数据，文字精炼。直接给结论和建议，不要空话套话。`;
 
-Date: ${new Date().toISOString().slice(0, 10)}
+  const prompt = `为项目「${project.name || project.id}」生成 Reddit 舆情日报。
 
-Today's data:
-- Total mentions: ${stats.total}
-- New posts: ${stats.posts}
-- New comments: ${stats.comments}
-- Sentiment breakdown: ${stats.positive} positive, ${stats.negative} negative, ${stats.neutral} neutral
-- Actionable feedback: ${stats.actionable} items
+日期：${new Date().toISOString().slice(0, 10)}
 
-Top issues (negative/cons):
-${stats.topCons.map((c, i) => `${i + 1}. ${c.text} (${c.count} mentions)`).join('\n') || 'None'}
+今日数据：
+- 总提及：${stats.total}
+- 新帖子：${stats.posts}
+- 新评论：${stats.comments}
+- 情感分布：正面 ${stats.positive}、负面 ${stats.negative}、中性 ${stats.neutral}
+- 可执行反馈：${stats.actionable} 条
 
-Top praises (positive/pros):
-${stats.topPros.map((c, i) => `${i + 1}. ${c.text} (${c.count} mentions)`).join('\n') || 'None'}
+主要负面问题/缺点：
+${stats.topCons.map((c, i) => `${i + 1}. ${c.text}（${c.count} 次提及）`).join('\n') || '无'}
 
-Sample comments with high relevance:
-${stats.samples.map((s, i) => `${i + 1}. [${s.sentiment}] ${s.summary}`).join('\n') || 'None'}
+主要正面评价/优点：
+${stats.topPros.map((c, i) => `${i + 1}. ${c.text}（${c.count} 次提及）`).join('\n') || '无'}
 
-Please write a report with these sections:
-1. 今日概况 (overview with key metrics)
-2. 正面反馈 (positive feedback highlights)
-3. 负面反馈与风险 (negative feedback and risks)
-4. 产品改进建议 (actionable product improvement suggestions)
-5. 总结 (brief conclusion)`;
+高相关度评论摘要：
+${stats.samples.map((s, i) => `${i + 1}. [${s.sentiment}] ${s.summary}`).join('\n') || '无'}
+
+请按以下结构撰写报告：
+1. 今日概况（核心指标一览）
+2. 正面反馈亮点
+3. 负面反馈与风险预警
+4. 运营建议与行动项
+5. 总结`;
 
   try {
     const report = await callLLM(config, prompt, systemPrompt);

@@ -69,7 +69,7 @@ async function runAnalysis(config) {
       if (!unanalyzed.length) break;
 
       log(`  [${project.id}] AI 分析 ${unanalyzed.length} 条...`);
-      const results = await analyzeBatch(config.ai, unanalyzed);
+      const results = await analyzeBatch(config.ai, unanalyzed, project.reportRole);
       if (results.length) {
         saveAnalysisBatch(results);
         totalAnalyzed += results.length;
