@@ -273,6 +273,10 @@ a.reddit-link:hover { color: #fff; text-shadow: 0 0 10px rgba(0,200,255,0.4); }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
 
+/* === Floating Save === */
+.floating-save { position: fixed; bottom: 24px; right: 24px; z-index: 150; }
+.floating-save .btn { padding: 10px 24px; font-size: 14px; box-shadow: 0 4px 20px rgba(0,200,255,0.3); }
+
 /* === Skeleton Loading === */
 .skel-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
 .skel-card { height: 90px; border-radius: 14px; background: var(--gradient-card); border: 1px solid var(--border); animation: pulse 1.5s ease infinite; }

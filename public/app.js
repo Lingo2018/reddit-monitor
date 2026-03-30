@@ -717,6 +717,9 @@ async function renderConfig() {
 
     <div style="margin-top:16px">
       <button class="btn btn-primary" id="save-config">${t('saveConfig')}</button>
+    </div>
+    <div class="floating-save">
+      <button class="btn btn-primary" id="save-config-float">${t('saveConfig')}</button>
     </div>`;
 
   const projectsList = $('#projects-list');
@@ -755,7 +758,7 @@ async function renderConfig() {
     renderProjects(projects);
   };
 
-  $('#save-config').onclick = async () => {
+  const doSave = async () => {
     const lines = v => v.split('\n').map(s => s.trim()).filter(Boolean);
     const cards = document.querySelectorAll('.project-card');
     const updatedProjects = [...cards].map(c => ({
@@ -808,6 +811,8 @@ async function renderConfig() {
       toast(t('saveFailed') + e.message);
     }
   };
+  $('#save-config').onclick = doSave;
+  $('#save-config-float').onclick = doSave;
 
   $('#test-ai').onclick = async () => {
     const result = $('#test-ai-result');
