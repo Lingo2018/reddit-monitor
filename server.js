@@ -349,15 +349,26 @@ app.post('/api/reports/regenerate', auth, async (req, res) => {
     const proj = cfg.projects.find(p => p.id === project);
     if (!proj) return res.status(404).json({ error: 'project not found' });
 
-    const { getDailyAnalysisStats, saveDailyReport } = await import('./db.js');
-    const { generateDailyReport } = await import('./analyzer.js');
+    const isSummary = date.startsWith('summary');
 
-    const stats = getDailyAnalysisStats(project, date);
-    if (stats.total === 0) return res.status(400).json({ error: 'no data for this date' });
+    let stats, report;
+    if (isSummary) {
+      const { getAllAnalysisStats, saveDailyReport } = await import('./db.js');
+      const { generateSummaryReport } = await import('./analyzer.js');
+      stats = getAllAnalysisStats(project);
+      if (stats.total === 0) return res.status(400).json({ error: 'no data' });
+      report = await generateSummaryReport(cfg.ai, proj, stats);
+    } else {
+      const { getDailyAnalysisStats, saveDailyReport } = await import('./db.js');
+      const { generateDailyReport } = await import('./analyzer.js');
+      stats = getDailyAnalysisStats(project, date);
+      if (stats.total === 0) return res.status(400).json({ error: 'no data for this date' });
+      report = await generateDailyReport(cfg.ai, proj, stats);
+    }
 
-    const report = await generateDailyReport(cfg.ai, proj, stats);
     if (!report) return res.status(500).json({ error: 'report generation failed' });
 
+    const { saveDailyReport } = await import('./db.js');
     db.prepare('DELETE FROM daily_reports WHERE report_date = ? AND project = ?').run(date, project);
     saveDailyReport({
       project, report_date: date,
