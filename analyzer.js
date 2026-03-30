@@ -163,7 +163,7 @@ export async function generateDailyReport(config, project, stats) {
     : '你是品牌舆情分析师，撰写每日 Reddit 社媒舆情监控报告。';
 
   const systemPrompt = `${role}
-要求：全文中文，紧凑实用，Markdown 格式。用表格呈现数据，文字精炼。直接给结论和建议，不要空话套话。`;
+要求：全文中文，紧凑实用，Markdown 格式。用表格呈现数据，文字精炼。直接给结论和建议，不要空话套话。不要使用 emoji 符号。在负面反馈部分必须保留原始 Reddit 链接（格式：[查看原帖](URL)），方便直接跳转回复。`;
 
   const prompt = `为项目「${project.name || project.id}」生成 Reddit 舆情日报。
 
@@ -196,7 +196,8 @@ ${(stats.negativeItems || []).map((n, i) => `${i + 1}. ${n.summary} (u/${n.autho
 5. 总结`;
 
   try {
-    const report = await callLLM(config, prompt, systemPrompt);
+    let report = await callLLM(config, prompt, systemPrompt);
+    report = report.replace(/[\uFFFD]/g, ''); // clean broken chars
     return report;
   } catch (err) {
     log(`报告生成失败: ${err.message}`);
@@ -213,7 +214,7 @@ export async function generateSummaryReport(config, project, stats) {
     : '你是品牌舆情分析师，撰写 Reddit 社媒舆情汇总报告。';
 
   const systemPrompt = `${role}
-要求：全文中文，系统性总结，Markdown 格式。用表格呈现数据，文字精炼有洞察。给出战略级建议，不要空话。`;
+要求：全文中文，系统性总结，Markdown 格式。用表格呈现数据，文字精炼有洞察。给出战略级建议，不要空话。不要使用 emoji 符号。在负面反馈部分必须保留原始 Reddit 链接（格式：[查看原帖](URL)），方便直接跳转回复。`;
 
   const prompt = `为项目「${project.name || project.id}」生成 Reddit 舆情汇总报告。
 
@@ -245,7 +246,8 @@ ${(stats.negativeItems || []).map((n, i) => `${i + 1}. ${n.summary} (u/${n.autho
 7. 总结与下一步行动`;
 
   try {
-    const report = await callLLM(config, prompt, systemPrompt);
+    let report = await callLLM(config, prompt, systemPrompt);
+    report = report.replace(/[\uFFFD]/g, '');
     return report;
   } catch (err) {
     log(`汇总报告生成失败: ${err.message}`);
