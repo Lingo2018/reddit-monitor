@@ -690,6 +690,17 @@ async function renderProducts() {
           <button class="btn btn-outline btn-sm" id="add-product-btn">${t('addProduct')}</button>
         </div>
       </div>
+      <div id="add-product-form" style="display:none;margin-bottom:16px" class="project-card">
+        <div class="form-row">
+          <div class="form-group"><label>${t('productName')}</label><input id="new-product-name" autocomplete="off"></div>
+        </div>
+        <div id="new-product-specs"></div>
+        <div class="btn-group" style="margin-top:8px">
+          <button class="btn btn-outline btn-sm" id="new-spec-btn">${t('addSpec')}</button>
+          <button class="btn btn-primary btn-sm" id="save-product-btn">${t('saveConfig')}</button>
+          <button class="btn btn-outline btn-sm" id="cancel-product-btn">${t('all')}</button>
+        </div>
+      </div>
       ${!products.length ? `<p style="color:var(--text-muted)">${t('noProducts')}</p>` : ''}
       <div id="products-container">
         ${products.map(p => {
@@ -732,11 +743,32 @@ async function renderProducts() {
     reader.readAsArrayBuffer(file);
   };
 
-  // Add product manually
-  $('#add-product-btn').onclick = async () => {
-    const name = prompt(t('productName'));
+  // Add product manually - show form
+  $('#add-product-btn').onclick = () => {
+    const form = $('#add-product-form');
+    form.style.display = form.style.display === 'none' ? 'block' : 'none';
+    $('#new-product-name').value = '';
+    $('#new-product-specs').innerHTML = '';
+  };
+  $('#cancel-product-btn').onclick = () => { $('#add-product-form').style.display = 'none'; };
+  $('#new-spec-btn').onclick = () => {
+    const container = $('#new-product-specs');
+    const row = document.createElement('div');
+    row.className = 'form-row';
+    row.style.marginBottom = '6px';
+    row.innerHTML = `<div class="form-group" style="margin:0"><input class="spec-key" placeholder="${t('specKey')}" autocomplete="off"></div><div class="form-group" style="margin:0"><input class="spec-val" placeholder="${t('specVal')}" autocomplete="off"></div>`;
+    container.appendChild(row);
+  };
+  $('#save-product-btn').onclick = async () => {
+    const name = $('#new-product-name').value.trim();
     if (!name) return;
-    await api('/products', { method: 'POST', body: { project: proj, name, specs: {} } });
+    const specs = {};
+    document.querySelectorAll('#new-product-specs .form-row').forEach(row => {
+      const k = row.querySelector('.spec-key').value.trim();
+      const v = row.querySelector('.spec-val').value.trim();
+      if (k && v) specs[k] = v;
+    });
+    await api('/products', { method: 'POST', body: { project: proj, name, specs } });
     clearClientCache();
     renderProducts();
   };
