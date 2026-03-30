@@ -389,12 +389,7 @@ async function renderData() {
         </tr>
         <tr class="expand-row" id="expand-${i}" style="display:none">
           <td colspan="8">
-            <div class="expand-content">
-              <div class="expand-meta">${sentimentBadge(r.sentiment)} <span>u/${r.author}${r.total_karma != null ? ' · karma ' + fmtKarma(r.total_karma) : ''} · r/${r.subreddit} · ${fmtUtc(r.created_utc)}</span></div>
-              ${r.body ? `<div class="expand-section"><div class="expand-label">${t('title_col')}</div><div class="expand-text">${esc(r.body)}</div></div>` : ''}
-              ${r.ai_summary ? `<div class="expand-section"><div class="expand-label">${t('aiSummary')}</div><div class="expand-text">${esc(r.ai_summary)}</div></div>` : ''}
-              <div style="margin-top:8px"><a class="reddit-link" href="https://reddit.com${r.permalink}" target="_blank">Reddit &rarr;</a></div>
-            </div>
+            <div class="expand-content">${esc(r.ai_summary || '-')}</div>
           </td>
         </tr>`).join('')}</tbody>
       </table>
