@@ -570,12 +570,12 @@ async function renderReportDetail(dateAndParams) {
     ${topCons.length ? `<div class="section"><h3>${t('negative')}</h3><ul>${topCons.map(c => `<li>${esc(c.text)} <span style="color:var(--text-muted)">(${c.count})</span></li>`).join('')}</ul></div>` : ''}
     ${(r.negativeItems || []).length ? `<div class="section"><h3>${t('negativeActions')}</h3>
       <table>
-        <thead><tr><th>${t('type')}</th><th>${t('author')}</th><th>${t('aiSummary')}</th><th></th></tr></thead>
+        <thead><tr><th style="width:50px">${t('type')}</th><th style="width:100px">${t('author')}</th><th>${t('aiSummary')}</th><th style="width:70px"></th></tr></thead>
         <tbody>${r.negativeItems.map(n => `<tr>
           <td style="white-space:nowrap">${n.type === 'post' ? t('post') : t('comment')}</td>
           <td style="white-space:nowrap"><a class="reddit-link" href="https://reddit.com/u/${n.author}" target="_blank">u/${n.author}</a></td>
           <td style="color:var(--text-light)">${esc(n.summary || '-')}</td>
-          <td><a class="btn btn-sm btn-outline" href="https://reddit.com${n.permalink}" target="_blank">${t('goReply')}</a></td>
+          <td style="white-space:nowrap"><a class="btn btn-sm btn-outline" href="https://reddit.com${n.permalink}" target="_blank" style="white-space:nowrap">${t('goReply')}</a></td>
         </tr>`).join('')}</tbody>
       </table>
     </div>` : ''}
