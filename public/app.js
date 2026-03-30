@@ -517,8 +517,9 @@ async function renderReports() {
   });
 
   $('#gen-summary').onclick = async () => {
-    const proj = currentProject || projectList.find(p => p.enabled !== false)?.id;
-    if (!proj) { toast('无可用项目'); return; }
+    if (!projectList.length) await loadProjects();
+    const proj = getProjectId();
+    if (!proj || proj === 'default') { toast('无可用项目'); return; }
     const btn = $('#gen-summary');
     btn.textContent = '...';
     btn.disabled = true;
