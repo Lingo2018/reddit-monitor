@@ -457,17 +457,25 @@ app.post('/api/products/upload', auth, async (req, res) => {
       }
     }
 
-    // Delete existing products for this project, then insert new
-    db.prepare('DELETE FROM products WHERE project = ?').run(project);
+    // Check existing products for dedup
+    const existing = getProducts(project);
+    const existingNames = new Set(existing.map(p => p.name));
+    let updated = 0, skipped = 0;
+
     for (const [name, specs] of Object.entries(productsSpecs)) {
-      if (Object.keys(specs).length > 0) {
+      if (Object.keys(specs).length === 0) continue;
+      if (existingNames.has(name)) {
+        // Update existing
+        const old = existing.find(p => p.name === name);
+        if (old) { updateProduct(old.id, { name, specs: JSON.stringify(specs) }); updated++; }
+      } else {
         addProduct({ project, name, specs: JSON.stringify(specs), created_at: new Date().toISOString() });
         added++;
       }
     }
 
     invalidateAll();
-    res.json({ ok: true, count: added });
+    res.json({ ok: true, added, updated, total: added + updated });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

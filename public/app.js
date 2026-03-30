@@ -53,7 +53,8 @@ const i18n = {
     products: '产品', uploadXlsx: '上传产品表格', addProduct: '+ 手动添加', deleteConfirm: '确定删除？',
     productName: '产品名称', productSpecs: '参数', specKey: '参数名', specVal: '参数值', addSpec: '+ 添加参数',
     editProduct: '编辑',
-    uploadSuccess: '导入成功，共 {n} 个产品', noProducts: '暂无产品数据，请上传产品表格或手动添加',
+    uploadSuccess: '导入成功，共 {n} 个产品', newItems: '新增', updatedItems: '更新',
+    noProducts: '暂无产品数据，请上传产品表格或手动添加',
     negativeActions: '负面反馈快速处理', goReply: '去回复',
     noReports: '暂无报告，数据累积后将自动生成每日舆情报告',
     reportDate: '日期', reportTotal: '总数', reportSentiment: '情感分布',
@@ -109,7 +110,8 @@ const i18n = {
     products: 'Products', uploadXlsx: 'Upload Specs XLSX', addProduct: '+ Add Product', deleteConfirm: 'Delete?',
     productName: 'Product Name', productSpecs: 'Specifications', specKey: 'Spec Name', specVal: 'Value', addSpec: '+ Add Spec',
     editProduct: 'Edit',
-    uploadSuccess: 'Imported {n} products', noProducts: 'No products yet. Upload a specs XLSX or add manually.',
+    uploadSuccess: 'Imported {n} products', newItems: 'new', updatedItems: 'updated',
+    noProducts: 'No products yet. Upload a specs XLSX or add manually.',
     negativeActions: 'Negative Feedback Actions', goReply: 'Reply',
     noReports: 'No reports yet. Daily reports will be auto-generated once data accumulates.',
     reportDate: 'Date', reportTotal: 'Total', reportSentiment: 'Sentiment',
@@ -689,7 +691,12 @@ async function renderProducts() {
   app.innerHTML = `
     <div class="section">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
-        <h3 style="margin:0">${t('products')} ${proj ? `(${proj})` : ''}</h3>
+        <h3 style="margin:0">${t('products')}
+          <select id="product-project-select" style="margin-left:8px;font-size:12px;padding:4px 8px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:6px;color:var(--text)">
+            ${projectList.map(p => `<option value="${p.id}" ${proj === p.id ? 'selected' : ''}>${p.name || p.id}</option>`).join('')}
+          </select>
+          <span style="font-size:13px;color:var(--text-muted);margin-left:8px">${t('totalResults').replace('{n}', products.length)}</span>
+        </h3>
         <div class="btn-group">
           <button class="btn btn-primary btn-sm" id="xlsx-upload-btn">${t('uploadXlsx')}</button>
           <input type="file" id="xlsx-upload" accept=".xlsx,.xls" style="display:none">
@@ -731,6 +738,14 @@ async function renderProducts() {
       </div>
     </div>`;
 
+  // Project selector on products page
+  $('#product-project-select').onchange = (e) => {
+    currentProject = e.target.value;
+    localStorage.setItem('rm-project', currentProject);
+    updateProjectSelector();
+    renderProducts();
+  };
+
   // Upload handler
   $('#xlsx-upload-btn').onclick = () => {
     $('#xlsx-upload').value = '';
@@ -757,7 +772,8 @@ async function renderProducts() {
         if (d.error) { toast('Error: ' + d.error); return; }
         if (d.ok) {
           clearClientCache();
-          toast(t('uploadSuccess').replace('{n}', d.count));
+          const msg = `${t('uploadSuccess').replace('{n}', d.total || d.count)}${d.updated ? ` (${d.added} ${t('newItems')}, ${d.updated} ${t('updatedItems')})` : ''}`;
+          toast(msg);
           renderProducts();
         } else { toast(d.error || 'upload failed'); }
       } catch (err) { toast(err.message); }
