@@ -151,8 +151,7 @@ function updateProjectSelector() {
 
 async function loadProjects() {
   try {
-    const res = await api('/config');
-    const cfg = await res.json();
+    const cfg = await apiCached('/config');
     projectList = (cfg.projects || []).filter(p => p.id);
     updateProjectSelector();
   } catch (e) { console.warn('loadProjects failed:', e); }
@@ -160,7 +159,14 @@ async function loadProjects() {
 
 // --- Client-side cache ---
 const clientCache = {};
-const CLIENT_CACHE_TTL = 60000;
+const CACHE_TTLS = { stats: 30000, mentions: 60000, users: 120000, reports: 120000, products: 120000, config: 300000 };
+
+function getCacheTTL(path) {
+  for (const [key, ttl] of Object.entries(CACHE_TTLS)) {
+    if (path.includes(key)) return ttl;
+  }
+  return 60000;
+}
 
 async function apiCached(path) {
   const now = Date.now();
@@ -169,7 +175,7 @@ async function apiCached(path) {
   }
   const res = await api(path);
   const data = await res.json();
-  clientCache[path] = { data, exp: now + CLIENT_CACHE_TTL };
+  clientCache[path] = { data, exp: now + getCacheTTL(path) };
   return data;
 }
 
@@ -252,7 +258,14 @@ function showLogin() {
   const submit = async () => {
     const pwd = $('#login-pwd').value;
     const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pwd }) });
-    if (res.ok) { navbar.style.display = 'flex'; updateNav(); location.hash = '#stats'; route(); }
+    if (res.ok) {
+      navbar.style.display = 'flex';
+      // Preload data in parallel
+      await loadProjects();
+      apiCached('/stats').catch(()=>{});
+      updateNav();
+      location.hash = '#stats'; route();
+    }
     else $('#login-err').textContent = t('wrongPwd');
   };
   $('#login-btn').onclick = submit;
@@ -533,9 +546,10 @@ async function renderReportDetail(dateAndParams) {
   const params = new URLSearchParams(dateAndParams.split('?')[1] || '');
   const project = params.get('p') || '';
 
-  const res = await api(`/reports/${date}?project=${project}`);
-  if (!res.ok) { app.innerHTML = `<div class="section"><p>Report not found</p></div>`; return; }
-  const r = await res.json();
+  let r;
+  try { r = await apiCached(`/reports/${date}?project=${project}`); }
+  catch { app.innerHTML = `<div class="section"><p>Report not found</p></div>`; return; }
+  if (r.error) { app.innerHTML = `<div class="section"><p>Report not found</p></div>`; return; }
 
   let topPros = [], topCons = [];
   try { topPros = JSON.parse(r.top_pros || '[]'); } catch {}
@@ -690,8 +704,7 @@ async function renderProducts() {
   app.innerHTML = skeleton(4);
   if (!projectList.length) await loadProjects();
   const proj = getProjectId();
-  const res = await api('/products?project=' + proj);
-  const products = await res.json();
+  const products = await apiCached('/products?project=' + proj);
 
   app.innerHTML = `
     <div class="section">
@@ -966,8 +979,7 @@ async function renderProducts() {
 // --- Config ---
 async function renderConfig() {
   app.innerHTML = skeleton(3);
-  const res = await api('/config');
-  const cfg = await res.json();
+  const cfg = await apiCached('/config');
 
   app.innerHTML = `
     <div class="section">
@@ -1156,6 +1168,7 @@ async function renderConfig() {
 
     try {
       await api('/config', { method: 'PUT', body: update });
+      clearClientCache();
       toast(t('configSaved'));
     } catch (e) {
       toast(t('saveFailed') + e.message);
