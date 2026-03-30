@@ -52,7 +52,7 @@ const i18n = {
     genSummary: '生成汇总报告', reportGenerated: '报告已生成',
     products: '产品', uploadXlsx: '上传产品表格', addProduct: '+ 手动添加',
     selectAll: '全选', batchDelete: '批量删除', batchDeleteConfirm: '确定删除选中的 {n} 个产品？',
-    deleteOneConfirm: '确定删除「{name}」？',
+    deleteOneConfirm: '确定删除「{name}」？', cancelBtn: '取消', confirmDelete: '删除',
     productName: '产品名称', productSpecs: '参数', specKey: '参数名', specVal: '参数值', addSpec: '+ 添加参数',
     editProduct: '编辑',
     uploadSuccess: '导入成功，共 {n} 个产品', newItems: '新增', updatedItems: '更新',
@@ -111,7 +111,7 @@ const i18n = {
     genSummary: 'Generate Summary Report', reportGenerated: 'Report generated',
     products: 'Products', uploadXlsx: 'Upload Specs XLSX', addProduct: '+ Add Product',
     selectAll: 'Select All', batchDelete: 'Delete Selected', batchDeleteConfirm: 'Delete {n} selected products?',
-    deleteOneConfirm: 'Delete "{name}"?',
+    deleteOneConfirm: 'Delete "{name}"?', cancelBtn: 'Cancel', confirmDelete: 'Delete',
     productName: 'Product Name', productSpecs: 'Specifications', specKey: 'Spec Name', specVal: 'Value', addSpec: '+ Add Spec',
     editProduct: 'Edit',
     uploadSuccess: 'Imported {n} products', newItems: 'new', updatedItems: 'updated',
@@ -729,7 +729,7 @@ async function renderProducts() {
         <div class="btn-group" style="margin-top:8px">
           <button class="btn btn-outline btn-sm" id="new-spec-btn">${t('addSpec')}</button>
           <button class="btn btn-primary btn-sm" id="save-product-btn">${t('saveConfig')}</button>
-          <button class="btn btn-outline btn-sm" id="cancel-product-btn">${t('all')}</button>
+          <button class="btn btn-outline btn-sm" id="cancel-product-btn">${t('cancelBtn')}</button>
         </div>
       </div>
       <div id="batch-bar" style="display:none;margin-bottom:12px;padding:10px 14px;background:rgba(255,61,113,0.08);border:1px solid rgba(255,61,113,0.2);border-radius:8px;display:flex;align-items:center;gap:10px">
@@ -768,8 +768,8 @@ async function renderProducts() {
       <div class="modal-content" style="max-width:380px;text-align:center">
         <p id="confirm-msg" style="font-size:15px;margin-bottom:20px"></p>
         <div class="btn-group" style="justify-content:center">
-          <button class="btn btn-outline btn-sm" id="confirm-cancel">${t('all')}</button>
-          <button class="btn btn-sm" id="confirm-ok" style="background:var(--red);color:#fff">${t('deleteProject')}</button>
+          <button class="btn btn-outline btn-sm" id="confirm-cancel">${t('cancelBtn')}</button>
+          <button class="btn btn-sm" id="confirm-ok" style="background:var(--red);color:#fff">${t('confirmDelete')}</button>
         </div>
       </div>
     </div>`;
