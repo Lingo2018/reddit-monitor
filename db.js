@@ -16,6 +16,13 @@ try {
   console.log('[db] 迁移完成: 添加 project 列');
 } catch {}
 
+// 迁移：添加 platform 列
+try {
+  db.exec(`ALTER TABLE mentions ADD COLUMN platform TEXT NOT NULL DEFAULT 'reddit'`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_mentions_platform ON mentions(platform)`);
+  console.log('[db] 迁移完成: 添加 platform 列');
+} catch {}
+
 // 建表（新安装时）
 db.exec(`
   CREATE TABLE IF NOT EXISTS mentions (
@@ -69,8 +76,8 @@ db.exec(`
 `);
 
 const insertMention = db.prepare(`
-  INSERT OR IGNORE INTO mentions (id, project, type, title, body, author, subreddit, permalink, score, num_comments, created_utc, discovered_at, source, matched_keywords, category, is_read)
-  VALUES (@id, @project, @type, @title, @body, @author, @subreddit, @permalink, @score, @num_comments, @created_utc, @discovered_at, @source, @matched_keywords, @category, 0)
+  INSERT OR IGNORE INTO mentions (id, project, type, title, body, author, subreddit, permalink, score, num_comments, created_utc, discovered_at, source, matched_keywords, category, is_read, platform)
+  VALUES (@id, @project, @type, @title, @body, @author, @subreddit, @permalink, @score, @num_comments, @created_utc, @discovered_at, @source, @matched_keywords, @category, 0, @platform)
 `);
 
 const insertPollLog = db.prepare(`

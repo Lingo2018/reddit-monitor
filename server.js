@@ -202,8 +202,8 @@ app.get('/api/stats', auth, (req, res) => {
 
 // --- Mentions with analysis (optimized + cached) ---
 app.get('/api/mentions-analyzed', auth, (req, res) => {
-  const { project, type, search, timeRange, sentiment, page = 1, limit = 50 } = req.query;
-  const cacheKey = `mentions:${project||''}:${type||''}:${search||''}:${timeRange||''}:${sentiment||''}:${page}:${limit}`;
+  const { project, type, search, timeRange, sentiment, platform, page = 1, limit = 50 } = req.query;
+  const cacheKey = `mentions:${project||''}:${type||''}:${search||''}:${timeRange||''}:${sentiment||''}:${platform||''}:${page}:${limit}`;
 
   const result = cached(cacheKey, CACHE_TTL, () => {
     const lim = Math.min(+limit || 50, 100);
@@ -215,6 +215,7 @@ app.get('/api/mentions-analyzed', auth, (req, res) => {
     if (project) { wheres.push('m.project = ?'); params.push(project); }
     if (type) { wheres.push('m.type = ?'); params.push(type); }
     if (sentiment) { wheres.push('a.sentiment = ?'); params.push(sentiment); needJoinForWhere = true; }
+    if (platform) { wheres.push('m.platform = ?'); params.push(platform); }
     if (search) { wheres.push("(m.title LIKE ? OR m.body LIKE ?)"); params.push(`%${search}%`, `%${search}%`); }
     if (timeRange) {
       const hours = { '24h': 24, '7d': 168, '30d': 720 }[timeRange];
@@ -479,6 +480,37 @@ app.post('/api/products/upload', auth, async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// --- Facebook ---
+app.get('/api/facebook/status', auth, async (req, res) => {
+  try {
+    const cfg = loadConfig();
+    if (!cfg.facebook?.accessToken) return res.json({ configured: false });
+    const { createFacebookFetcher } = await import('./facebook-fetcher.js');
+    const fb = createFacebookFetcher(cfg.facebook);
+    const status = await fb.verifyToken();
+    res.json({ configured: true, ...status });
+  } catch (e) { res.json({ configured: false, error: e.message }); }
+});
+
+app.post('/api/facebook/exchange-token', auth, async (req, res) => {
+  try {
+    const cfg = loadConfig();
+    if (!cfg.facebook?.accessToken || !cfg.facebook?.appId || !cfg.facebook?.appSecret) {
+      return res.status(400).json({ error: 'Need accessToken, appId, and appSecret' });
+    }
+    const { createFacebookFetcher } = await import('./facebook-fetcher.js');
+    const fb = createFacebookFetcher(cfg.facebook);
+    const result = await fb.exchangeToken(cfg.facebook.appId, cfg.facebook.appSecret);
+    if (result.token) {
+      // Save new long-lived token
+      saveConfig({ facebook: { ...cfg.facebook, accessToken: result.token } });
+      res.json({ ok: true, expiresIn: result.expiresIn });
+    } else {
+      res.json({ ok: false, error: result.error });
+    }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // --- Re-analyze all (clear old analysis, redo with current prompts) ---

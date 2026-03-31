@@ -25,9 +25,15 @@
         "industry": [],
         "competitor": []
       },
-      "subreddits": []
+      "subreddits": [],
+      "facebookGroups": []
     }
   ],
+  "facebook": {
+    "appId": "",
+    "appSecret": "",
+    "accessToken": ""
+  },
   "pollIntervalMinutes": 15,
   "webPort": 3000,
   "webPassword": "admin",

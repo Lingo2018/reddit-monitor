@@ -46,6 +46,7 @@ export function loadConfig() {
     },
     kookeey: cfg.kookeey || null,
     ai: cfg.ai || null,
+    facebook: cfg.facebook || null,
   };
 }
 
@@ -55,13 +56,15 @@ export function getConfigForUI() {
   if (cfg.proxy?.password) cfg.proxy.password = '***';
   if (cfg.kookeey?.passwordPrefix) cfg.kookeey.passwordPrefix = '***';
   if (cfg.ai?.apiKey) cfg.ai.apiKey = '***';
+  if (cfg.facebook?.accessToken) cfg.facebook.accessToken = '***';
+  if (cfg.facebook?.appSecret) cfg.facebook.appSecret = '***';
   delete cfg.webPassword;
   return cfg;
 }
 
 export function saveConfig(updates) {
   const cfg = readRaw();
-  const allowed = ['projects', 'pollIntervalMinutes', 'proxy', 'kookeey', 'webPassword', 'ai', 'localProxy'];
+  const allowed = ['projects', 'pollIntervalMinutes', 'proxy', 'kookeey', 'webPassword', 'ai', 'localProxy', 'facebook'];
 
   for (const key of allowed) {
     if (updates[key] !== undefined) {
@@ -81,6 +84,14 @@ export function saveConfig(updates) {
           updates.ai.apiKey = cfg.ai.apiKey;
         }
         cfg.ai = { ...cfg.ai, ...updates.ai };
+      } else if (key === 'facebook' && cfg.facebook && updates.facebook) {
+        if (!updates.facebook.accessToken || updates.facebook.accessToken === '***') {
+          updates.facebook.accessToken = cfg.facebook.accessToken;
+        }
+        if (!updates.facebook.appSecret || updates.facebook.appSecret === '***') {
+          updates.facebook.appSecret = cfg.facebook.appSecret;
+        }
+        cfg.facebook = { ...cfg.facebook, ...updates.facebook };
       } else {
         cfg[key] = updates[key];
       }

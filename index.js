@@ -1,5 +1,6 @@
 import { loadConfig } from './config.js';
 import { createFetcher, createKookeeyFetcher } from './fetcher.js';
+import { createFacebookFetcher } from './facebook-fetcher.js';
 import db from './db.js';
 import { saveMentions, logPoll, logCommentRate, getUnanalyzedMentions, saveAnalysisBatch, getDailyAnalysisStats, saveDailyReport, getStaleUsers, saveUsers, getProductsForPrompt } from './db.js';
 import { analyzeBatch, generateDailyReport } from './analyzer.js';
@@ -28,7 +29,7 @@ async function runProject(project, fetcher) {
       tasks.push(`sub_post:${sub}`);
       if (!posts.length) errors.push(`sub_post:${sub}: no data returned`);
       for (const item of posts) {
-        allMentions.push({ ...item, project: pid, discovered_at: new Date().toISOString(), source: 'subreddit', matched_keywords: '[]', category: 'subreddit' });
+        allMentions.push({ ...item, project: pid, discovered_at: new Date().toISOString(), source: 'subreddit', matched_keywords: '[]', category: 'subreddit', platform: 'reddit' });
       }
 
       log(`  [${pid}] r/${sub} 评论流`);
@@ -47,7 +48,7 @@ async function runProject(project, fetcher) {
 
       // 评论全量存储
       for (const item of comments) {
-        allMentions.push({ ...item, project: pid, discovered_at: new Date().toISOString(), source: 'subreddit_comment', matched_keywords: '[]', category: 'subreddit' });
+        allMentions.push({ ...item, project: pid, discovered_at: new Date().toISOString(), source: 'subreddit_comment', matched_keywords: '[]', category: 'subreddit', platform: 'reddit' });
       }
       log(`    评论 ${comments.length} 条`);
     } catch (err) { errors.push(`sub:${sub}: ${err.message}`); }
@@ -55,6 +56,45 @@ async function runProject(project, fetcher) {
 
   const newCount = saveMentions(allMentions);
   log(`  [${pid}] 完成: ${newCount} 新 / ${allMentions.length} 总`);
+  return { tasks, errors, newCount, totalItems: allMentions.length };
+}
+
+async function runFacebookProject(project, fbFetcher) {
+  const pid = project.id;
+  const allMentions = [];
+  const tasks = [];
+  const errors = [];
+
+  for (const group of project.facebookGroups || []) {
+    const groupId = group.groupId || group;
+    const groupName = group.name || groupId;
+    try {
+      log(`  [${pid}] FB Group: ${groupName}`);
+      const posts = await fbFetcher.groupFeed(groupId);
+      tasks.push(`fb_feed:${groupName}`);
+      if (!posts.length) { errors.push(`fb_feed:${groupName}: no data`); }
+
+      for (const item of posts) {
+        item.subreddit = groupName;
+        allMentions.push({ ...item, project: pid, discovered_at: new Date().toISOString(), source: 'facebook_group', matched_keywords: '[]', category: 'facebook', platform: 'facebook' });
+
+        // Fetch comments for posts with comments
+        if (item.num_comments > 0) {
+          const realPostId = item.id.replace('fb_post_', '');
+          const comments = await fbFetcher.postComments(realPostId);
+          for (const c of comments) {
+            c.subreddit = groupName;
+            allMentions.push({ ...c, project: pid, discovered_at: new Date().toISOString(), source: 'facebook_comment', matched_keywords: '[]', category: 'facebook', platform: 'facebook' });
+          }
+          if (comments.length) log(`    评论 ${comments.length} 条`);
+        }
+      }
+      log(`    帖子 ${posts.length} 条`);
+    } catch (err) { errors.push(`fb:${groupName}: ${err.message}`); }
+  }
+
+  const newCount = saveMentions(allMentions);
+  log(`  [${pid}] FB 完成: ${newCount} 新 / ${allMentions.length} 总`);
   return { tasks, errors, newCount, totalItems: allMentions.length };
 }
 
@@ -137,11 +177,30 @@ async function runPoll() {
   const allTasks = [];
   const allErrors = [];
 
+  // Facebook fetcher (if configured)
+  let fbFetcher = null;
+  try {
+    if (config.facebook?.accessToken) fbFetcher = createFacebookFetcher(config.facebook);
+  } catch (e) { log(`Facebook fetcher 初始化失败: ${e.message}`); }
+
   for (const project of config.projects) {
-    const result = await runProject(project, fetcher);
-    totalNew += result.newCount;
-    allTasks.push(...result.tasks);
-    allErrors.push(...result.errors);
+    // Reddit
+    if (project.subreddits?.length) {
+      const result = await runProject(project, fetcher);
+      totalNew += result.newCount;
+      allTasks.push(...result.tasks);
+      allErrors.push(...result.errors);
+    }
+
+    // Facebook
+    if (fbFetcher && project.facebookGroups?.length) {
+      try {
+        const fbResult = await runFacebookProject(project, fbFetcher);
+        totalNew += fbResult.newCount;
+        allTasks.push(...fbResult.tasks);
+        allErrors.push(...fbResult.errors);
+      } catch (e) { log(`  [${project.id}] Facebook 出错: ${e.message}`); }
+    }
   }
 
   const durationMs = Date.now() - startTime;
@@ -155,7 +214,7 @@ async function runPoll() {
     // Collect all unique authors from this round
     const allAuthors = [...new Set(
       config.projects.flatMap(p => {
-        const rows = db.prepare('SELECT DISTINCT author FROM mentions WHERE project = ? AND author IS NOT NULL').all(p.id);
+        const rows = db.prepare("SELECT DISTINCT author FROM mentions WHERE project = ? AND platform = 'reddit' AND author IS NOT NULL").all(p.id);
         return rows.map(r => r.author);
       })
     )].filter(u => u && u !== '[deleted]' && u !== 'AutoModerator');

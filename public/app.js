@@ -1,12 +1,17 @@
 const $ = s => document.querySelector(s);
 const app = $('#app');
 const navbar = $('#navbar');
+let currentPlatform = localStorage.getItem('rm-platform') || 'reddit';
+let currentTab = 'stats';
 
 // --- i18n ---
 const i18n = {
   zh: {
-    title: 'Reddit 监控',
-    stats: '概览', data: '数据', reports: '报告', config: '配置', logout: '退出',
+    title: 'Social Monitor',
+    stats: '概览', data: '数据', reports: '报告', config: '配置', logout: '退出', settings: '设置',
+    fbGroups: 'Facebook Groups（groupId:名称，每行一个）', fbToken: 'Access Token', fbAppId: 'App ID', fbAppSecret: 'App Secret',
+    fbSetting: 'Facebook 设置', testToken: '测试 Token', tokenValid: 'Token 有效', tokenInvalid: 'Token 无效',
+    exchangeToken: '延长 Token', exchangeOk: 'Token 已延长',
     password: '请输入密码', login: '登录', wrongPwd: '密码错误',
     loading: '加载中...',
     totalMentions: '总提及', unread: '未读', brand: '品牌', industry: '行业',
@@ -64,8 +69,11 @@ const i18n = {
     langSwitch: 'EN',
   },
   en: {
-    title: 'Reddit Monitor',
-    stats: 'Stats', data: 'Data', reports: 'Reports', config: 'Config', logout: 'Logout',
+    title: 'Social Monitor',
+    stats: 'Stats', data: 'Data', reports: 'Reports', config: 'Config', logout: 'Logout', settings: 'Settings',
+    fbGroups: 'Facebook Groups (groupId:name, one per line)', fbToken: 'Access Token', fbAppId: 'App ID', fbAppSecret: 'App Secret',
+    fbSetting: 'Facebook Settings', testToken: 'Test Token', tokenValid: 'Token valid', tokenInvalid: 'Token invalid',
+    exchangeToken: 'Extend Token', exchangeOk: 'Token extended',
     password: 'Password', login: 'Login', wrongPwd: 'Wrong password',
     loading: 'Loading...',
     totalMentions: 'Total Mentions', unread: 'Unread', brand: 'Brand', industry: 'Industry',
@@ -130,16 +138,40 @@ let projectList = [];
 function t(key) { return i18n[lang]?.[key] || i18n.en[key] || key; }
 
 function updateNav() {
-  $('#nav-stats').textContent = t('stats');
-  $('#nav-data').textContent = t('data');
-  $('#nav-reports').textContent = t('reports');
-  $('#nav-users').textContent = t('users');
-  $('#nav-products').textContent = t('products');
-  $('#nav-config').textContent = t('config');
   $('#nav-logout').textContent = t('logout');
   $('#lang-btn').textContent = t('langSwitch');
   $('.nav-brand').textContent = t('title');
+  $('#sidebar-settings').textContent = t('settings');
   updateProjectSelector();
+  updateSidebar();
+  updateTabs();
+}
+
+function updateSidebar() {
+  document.querySelectorAll('.sidebar-item').forEach(item => {
+    item.classList.toggle('active', item.dataset.platform === currentPlatform);
+  });
+}
+
+function updateTabs() {
+  const tabs = $('#tabs');
+  let tabList;
+  if (currentPlatform === 'settings') {
+    tabList = [{ id: 'config', label: t('config') }];
+  } else {
+    tabList = [
+      { id: 'stats', label: t('stats') },
+      { id: 'data', label: t('data') },
+      { id: 'reports', label: t('reports') },
+      { id: 'users', label: t('users') },
+      { id: 'products', label: t('products') },
+      { id: 'config', label: t('config') },
+    ];
+  }
+  tabs.innerHTML = tabList.map(t => `<div class="tab-item${currentTab === t.id ? ' active' : ''}" data-tab="${t.id}">${t.label}</div>`).join('');
+  tabs.querySelectorAll('.tab-item').forEach(tab => {
+    tab.onclick = () => { currentTab = tab.dataset.tab; updateTabs(); route(); };
+  });
 }
 
 function updateProjectSelector() {
@@ -210,17 +242,18 @@ function toast(msg) {
 
 // --- Router ---
 function route() {
-  const hash = location.hash.slice(1) || 'stats';
-  document.querySelectorAll('.nav-link[data-page]').forEach(a => {
-    a.classList.toggle('active', a.dataset.page === hash);
-  });
-  if (hash === 'stats') renderStats();
-  else if (hash === 'data') renderData();
-  else if (hash === 'reports') renderReports();
-  else if (hash === 'users') renderUsers();
-  else if (hash === 'products') renderProducts();
-  else if (hash === 'config') renderConfig();
-  else if (hash.startsWith('report/')) renderReportDetail(hash.slice(7));
+  // Handle report detail via hash
+  const hash = location.hash.slice(1);
+  if (hash.startsWith('report/')) { renderReportDetail(hash.slice(7)); return; }
+
+  if (currentPlatform === 'settings') { renderGlobalSettings(); return; }
+
+  if (currentTab === 'stats') renderStats();
+  else if (currentTab === 'data') renderData();
+  else if (currentTab === 'reports') renderReports();
+  else if (currentTab === 'users') renderUsers();
+  else if (currentTab === 'products') renderProducts();
+  else if (currentTab === 'config') renderPlatformConfig();
 }
 
 async function init() {
@@ -228,14 +261,30 @@ async function init() {
     const res = await fetch('/api/me');
     if (res.ok) {
       navbar.style.display = 'flex';
+      $('#layout').style.display = 'flex';
       await loadProjects();
       updateNav();
-      // Project selector change
+
+      // Project selector
       $('#project-selector').onchange = (e) => {
         currentProject = e.target.value;
         localStorage.setItem('rm-project', currentProject);
         route();
       };
+
+      // Sidebar clicks
+      document.querySelectorAll('.sidebar-item').forEach(item => {
+        item.onclick = () => {
+          currentPlatform = item.dataset.platform;
+          localStorage.setItem('rm-platform', currentPlatform);
+          if (currentPlatform === 'settings') currentTab = 'config';
+          else if (currentTab === 'config' && currentPlatform !== 'settings') currentTab = 'stats';
+          updateSidebar();
+          updateTabs();
+          route();
+        };
+      });
+
       route();
     }
     else showLogin();
@@ -245,6 +294,7 @@ async function init() {
 // --- Login ---
 function showLogin() {
   navbar.style.display = 'none';
+  if ($('#layout')) $('#layout').style.display = 'none';
   app.innerHTML = `
     <div class="login-wrap">
       <div class="login-card">
@@ -260,11 +310,11 @@ function showLogin() {
     const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pwd }) });
     if (res.ok) {
       navbar.style.display = 'flex';
-      // Preload data in parallel
+      $('#layout').style.display = 'flex';
       await loadProjects();
       apiCached('/stats').catch(()=>{});
       updateNav();
-      location.hash = '#stats'; route();
+      currentTab = 'stats'; route();
     }
     else $('#login-err').textContent = t('wrongPwd');
   };
@@ -977,8 +1027,102 @@ async function renderProducts() {
   });
 }
 
-// --- Config ---
-async function renderConfig() {
+// --- Platform Config (Reddit or Facebook specific) ---
+async function renderPlatformConfig() {
+  if (currentPlatform === 'reddit') return renderConfig();
+  if (currentPlatform === 'facebook') return renderFacebookConfig();
+}
+
+// --- Facebook Config ---
+async function renderFacebookConfig() {
+  app.innerHTML = skeleton(3);
+  const cfg = await apiCached('/config');
+  const fb = cfg.facebook || {};
+
+  app.innerHTML = `
+    <div class="section">
+      <h3>${t('fbSetting')}</h3>
+      <div class="form-row">
+        <div class="form-group"><label>${t('fbAppId')}</label><input id="c-fb-appid" value="${fb.appId || ''}" autocomplete="off"></div>
+        <div class="form-group"><label>${t('fbAppSecret')}</label><input id="c-fb-secret" type="password" value="" autocomplete="new-password" placeholder="${t('unchangedHint')}"></div>
+      </div>
+      <div class="form-group"><label>${t('fbToken')}</label><input id="c-fb-token" type="password" value="" autocomplete="new-password" placeholder="${t('unchangedHint')}"></div>
+      <div style="margin-top:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-outline btn-sm" id="test-fb-token">${t('testToken')}</button>
+        <button class="btn btn-outline btn-sm" id="exchange-fb-token">${t('exchangeToken')}</button>
+        <span id="fb-token-result" style="font-size:13px"></span>
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>${t('projects')}</h3>
+      <div id="fb-projects-list"></div>
+    </div>
+
+    <div style="margin-top:16px">
+      <button class="btn btn-primary" id="save-fb-config">${t('saveConfig')}</button>
+    </div>
+    <div class="floating-save">
+      <button class="btn btn-primary" id="save-fb-config-float">${t('saveConfig')}</button>
+    </div>`;
+
+  // Render project facebook groups
+  const projectsList = $('#fb-projects-list');
+  projectsList.innerHTML = (cfg.projects || []).map((p, i) => `
+    <div class="project-card" data-idx="${i}">
+      <div class="project-header"><h4>${esc(p.name || p.id)}</h4></div>
+      <div class="form-group"><label>${t('fbGroups')}</label><textarea class="fb-groups" rows="3">${(p.facebookGroups || []).map(g => typeof g === 'string' ? g : g.groupId + ':' + (g.name || '')).join('\n')}</textarea></div>
+    </div>`).join('');
+
+  const doSaveFb = async () => {
+    const update = {
+      facebook: { appId: $('#c-fb-appid').value.trim() },
+      projects: (cfg.projects || []).map((p, i) => {
+        const textarea = document.querySelectorAll('.fb-groups')[i];
+        const groups = (textarea?.value || '').split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+          const [gid, ...rest] = l.split(':');
+          return { groupId: gid.trim(), name: rest.join(':').trim() || gid.trim() };
+        });
+        return { ...p, facebookGroups: groups };
+      }),
+    };
+    const secret = $('#c-fb-secret').value;
+    if (secret) update.facebook.appSecret = secret;
+    const token = $('#c-fb-token').value;
+    if (token) update.facebook.accessToken = token;
+
+    try {
+      await api('/config', { method: 'PUT', body: update });
+      clearClientCache();
+      toast(t('configSaved'));
+    } catch (e) { toast(t('saveFailed') + e.message); }
+  };
+  $('#save-fb-config').onclick = doSaveFb;
+  $('#save-fb-config-float').onclick = doSaveFb;
+
+  $('#test-fb-token').onclick = async () => {
+    const result = $('#fb-token-result');
+    result.textContent = '...';
+    try {
+      const res = await api('/facebook/status');
+      const d = await res.json();
+      if (d.valid) { result.textContent = t('tokenValid') + ` (${d.name})`; result.style.color = 'var(--green)'; }
+      else { result.textContent = t('tokenInvalid') + ': ' + (d.error || ''); result.style.color = 'var(--red)'; }
+    } catch (e) { result.textContent = e.message; result.style.color = 'var(--red)'; }
+  };
+
+  $('#exchange-fb-token').onclick = async () => {
+    try {
+      const res = await api('/facebook/exchange-token', { method: 'POST' });
+      const d = await res.json();
+      if (d.ok) { toast(t('exchangeOk')); clearClientCache(); }
+      else { toast(d.error || 'failed'); }
+    } catch (e) { toast(e.message); }
+  };
+}
+
+// --- Global Settings (AI, proxy, password) ---
+async function renderGlobalSettings() {
   app.innerHTML = skeleton(3);
   const cfg = await apiCached('/config');
 
@@ -986,22 +1130,12 @@ async function renderConfig() {
     <div class="section">
       <h3>${t('aiSetting')}</h3>
       <div class="form-row">
-        <div class="form-group">
-          <label>${t('aiEndpoint')}</label>
-          <input id="c-ai-endpoint" value="${cfg.ai?.endpoint || ''}" autocomplete="off" placeholder="https://api.example.com/v1/messages">
-        </div>
-        <div class="form-group">
-          <label>${t('aiKey')}</label>
-          <input id="c-ai-key" type="password" value="" autocomplete="new-password" placeholder="${t('unchangedHint')}">
-        </div>
-        <div class="form-group">
-          <label>${t('aiModel')}</label>
-          <input id="c-ai-model" value="${cfg.ai?.model || 'claude-sonnet-4-20250514'}" autocomplete="off">
-        </div>
+        <div class="form-group"><label>${t('aiEndpoint')}</label><input id="c-ai-endpoint" value="${cfg.ai?.endpoint || ''}" autocomplete="off"></div>
+        <div class="form-group"><label>${t('aiKey')}</label><input id="c-ai-key" type="password" value="" autocomplete="new-password" placeholder="${t('unchangedHint')}"></div>
+        <div class="form-group"><label>${t('aiModel')}</label><input id="c-ai-model" value="${cfg.ai?.model || 'claude-sonnet-4-20250514'}" autocomplete="off"></div>
       </div>
-      <div style="margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <div style="margin-top:8px;display:flex;gap:10px;align-items:center">
         <button class="btn btn-outline btn-sm" id="test-ai">${t('testAi')}</button>
-        <button class="btn btn-outline btn-sm" id="reanalyze-btn" style="display:none">${t('reanalyze')}</button>
         <span id="test-ai-result" style="font-size:13px"></span>
       </div>
     </div>
@@ -1009,84 +1143,72 @@ async function renderConfig() {
     <div class="section">
       <h3>${t('localProxySetting')}</h3>
       <div class="form-row">
-        <div class="form-group">
-          <label>${t('enabled')}</label>
-          <select id="c-lp-enabled">
-            <option value="true" ${cfg.localProxy?.enabled ? 'selected' : ''}>Yes</option>
-            <option value="false" ${!cfg.localProxy?.enabled ? 'selected' : ''}>No</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>${t('host')}</label>
-          <input id="c-lp-host" value="${cfg.localProxy?.host || '127.0.0.1'}" autocomplete="off">
-        </div>
-        <div class="form-group">
-          <label>${t('port')}</label>
-          <input id="c-lp-port" type="number" value="${cfg.localProxy?.port || 10808}" autocomplete="off">
-        </div>
-      </div>
-    </div>
-
-    <div class="section">
-      <h3>${t('proxySetting')}</h3>
-      <div class="form-row">
-        <div class="form-group">
-          <label>${t('enabled')}</label>
-          <select id="c-proxy-enabled">
-            <option value="true" ${cfg.proxy?.enabled ? 'selected' : ''}>Yes</option>
-            <option value="false" ${!cfg.proxy?.enabled ? 'selected' : ''}>No</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>${t('host')}</label>
-          <input id="c-proxy-host" value="${cfg.proxy?.host || ''}" autocomplete="off">
-        </div>
-        <div class="form-group">
-          <label>${t('port')}</label>
-          <input id="c-proxy-port" type="number" value="${cfg.proxy?.port || ''}" autocomplete="off">
-        </div>
-        <div class="form-group">
-          <label>${t('username')}</label>
-          <input id="c-proxy-user" value="${cfg.proxy?.username || ''}" autocomplete="off">
-        </div>
-        <div class="form-group">
-          <label>${t('passwordField')}</label>
-          <input id="c-proxy-pass" type="password" value="" autocomplete="new-password" placeholder="${t('unchangedHint')}">
-        </div>
-        <div class="form-group">
-          <label>${t('protocol')}</label>
-          <input id="c-proxy-proto" value="${cfg.proxy?.protocol || 'http'}" autocomplete="off">
-        </div>
+        <div class="form-group"><label>${t('enabled')}</label><select id="c-lp-enabled"><option value="true" ${cfg.localProxy?.enabled ? 'selected' : ''}>Yes</option><option value="false" ${!cfg.localProxy?.enabled ? 'selected' : ''}>No</option></select></div>
+        <div class="form-group"><label>${t('host')}</label><input id="c-lp-host" value="${cfg.localProxy?.host || '127.0.0.1'}" autocomplete="off"></div>
+        <div class="form-group"><label>${t('port')}</label><input id="c-lp-port" type="number" value="${cfg.localProxy?.port || 10808}" autocomplete="off"></div>
       </div>
     </div>
 
     <div class="section">
       <h3>${t('pollSetting')}</h3>
-      <div class="form-group">
-        <label>${t('interval')}</label>
-        <input id="c-interval" type="number" value="${cfg.pollIntervalMinutes || 8}" style="width:120px" autocomplete="off">
-      </div>
-      <div class="form-group">
-        <label>${t('webPwd')}</label>
-        <input id="c-webpwd" type="password" value="" autocomplete="new-password" placeholder="${t('unchangedHint')}">
-      </div>
-    </div>
-
-    <div class="section">
-      <h3>${t('projects')}</h3>
-      <div id="projects-list"></div>
-      <button class="btn btn-outline" id="add-project" style="margin-top:10px">${t('addProject')}</button>
+      <div class="form-group"><label>${t('interval')}</label><input id="c-interval" type="number" value="${cfg.pollIntervalMinutes || 8}" style="width:120px" autocomplete="off"></div>
+      <div class="form-group"><label>${t('webPwd')}</label><input id="c-webpwd" type="password" value="" autocomplete="new-password" placeholder="${t('unchangedHint')}"></div>
     </div>
 
     <div style="margin-top:16px">
-      <button class="btn btn-primary" id="save-config">${t('saveConfig')}</button>
+      <button class="btn btn-primary" id="save-global">${t('saveConfig')}</button>
     </div>
     <div class="floating-save">
-      <button class="btn btn-primary" id="save-config-float">${t('saveConfig')}</button>
+      <button class="btn btn-primary" id="save-global-float">${t('saveConfig')}</button>
     </div>`;
 
-  const projectsList = $('#projects-list');
+  const doSaveGlobal = async () => {
+    const update = {
+      pollIntervalMinutes: +$('#c-interval').value || 8,
+      localProxy: { enabled: $('#c-lp-enabled').value === 'true', host: $('#c-lp-host').value.trim() || '127.0.0.1', port: +$('#c-lp-port').value || 10808 },
+      ai: { endpoint: $('#c-ai-endpoint').value.trim(), model: $('#c-ai-model').value.trim() },
+    };
+    const aiKey = $('#c-ai-key').value;
+    if (aiKey) update.ai.apiKey = aiKey;
+    const webpwd = $('#c-webpwd').value;
+    if (webpwd) update.webPassword = webpwd;
+    try {
+      await api('/config', { method: 'PUT', body: update });
+      clearClientCache();
+      toast(t('configSaved'));
+    } catch (e) { toast(t('saveFailed') + e.message); }
+  };
+  $('#save-global').onclick = doSaveGlobal;
+  $('#save-global-float').onclick = doSaveGlobal;
 
+  $('#test-ai').onclick = async () => {
+    const result = $('#test-ai-result');
+    result.textContent = t('testAiTesting');
+    result.style.color = 'var(--text-muted)';
+    try {
+      const res = await api('/ai-test');
+      const d = await res.json();
+      if (d.ok) { result.textContent = t('testAiOk') + (d.model ? ` (${d.model})` : ''); result.style.color = 'var(--green)'; }
+      else { result.textContent = t('testAiFail') + (d.error || ''); result.style.color = 'var(--red)'; }
+    } catch (e) { result.textContent = t('testAiFail') + e.message; result.style.color = 'var(--red)'; }
+  };
+}
+
+// --- Reddit Config (project subreddits, proxy, keywords) ---
+async function renderConfig() {
+  app.innerHTML = skeleton(3);
+  const cfg = await apiCached('/config');
+
+  app.innerHTML = `
+    <div class="section">
+      <h3>${t('projects')} — Reddit</h3>
+      <div id="projects-list"></div>
+      <button class="btn btn-outline" id="add-project" style="margin-top:10px">${t('addProject')}</button>
+    </div>
+    <div style="margin-top:16px"><button class="btn btn-primary" id="save-config">${t('saveConfig')}</button></div>
+    <div class="floating-save"><button class="btn btn-primary" id="save-config-float">${t('saveConfig')}</button></div>`;
+
+  const projectsList = $('#projects-list');
   function renderProjects(projects) {
     projectsList.innerHTML = projects.map((p, i) => `
       <div class="project-card" data-idx="${i}">
@@ -1103,11 +1225,7 @@ async function renderConfig() {
         </div>
         <div class="form-group"><label>${t('reportRole')}</label><textarea class="p-role" rows="2" placeholder="${t('reportRoleHint')}">${esc(p.reportRole || '')}</textarea></div>
         <div class="form-group"><label>${t('subreddits')}</label><textarea class="p-subs">${(p.subreddits || []).join('\n')}</textarea></div>
-        <div class="form-group"><label>${t('brandKw')} <span style="color:var(--text-muted);font-size:11px">— ${t('comingSoon')}</span></label><textarea class="p-brand" disabled style="opacity:.5;cursor:not-allowed">${(p.keywords?.brand || []).join('\n')}</textarea></div>
-        <div class="form-group"><label>${t('industryKw')} <span style="color:var(--text-muted);font-size:11px">— ${t('comingSoon')}</span></label><textarea class="p-industry" disabled style="opacity:.5;cursor:not-allowed">${(p.keywords?.industry || []).join('\n')}</textarea></div>
-        <div class="form-group"><label>${t('competitorKw')} <span style="color:var(--text-muted);font-size:11px">— ${t('comingSoon')}</span></label><textarea class="p-competitor" disabled style="opacity:.5;cursor:not-allowed">${(p.keywords?.competitor || []).join('\n')}</textarea></div>
       </div>`).join('');
-
     document.querySelectorAll('.del-project').forEach(btn => {
       btn.onclick = () => { projects.splice(+btn.closest('.project-card').dataset.idx, 1); renderProjects(projects); };
     });
@@ -1117,7 +1235,7 @@ async function renderConfig() {
   renderProjects(projects);
 
   $('#add-project').onclick = () => {
-    projects.push({ id: '', name: '', enabled: true, keywords: { brand: [], industry: [], competitor: [] }, subreddits: [] });
+    projects.push({ id: '', name: '', enabled: true, subreddits: [] });
     renderProjects(projects);
   };
 
@@ -1125,96 +1243,21 @@ async function renderConfig() {
     const lines = v => v.split('\n').map(s => s.trim()).filter(Boolean);
     const cards = document.querySelectorAll('.project-card');
     const updatedProjects = [...cards].map(c => ({
+      ...((cfg.projects || [])[+c.dataset.idx] || {}),
       id: c.querySelector('.p-id').value.trim(),
       name: c.querySelector('.p-name').value.trim(),
       reportRole: c.querySelector('.p-role').value.trim(),
       enabled: c.querySelector('.p-enabled').checked,
-      keywords: {
-        brand: lines(c.querySelector('.p-brand').value),
-        industry: lines(c.querySelector('.p-industry').value),
-        competitor: lines(c.querySelector('.p-competitor').value),
-      },
       subreddits: lines(c.querySelector('.p-subs').value),
     }));
-
-    const update = {
-      projects: updatedProjects,
-      pollIntervalMinutes: +$('#c-interval').value || 8,
-      localProxy: {
-        enabled: $('#c-lp-enabled').value === 'true',
-        host: $('#c-lp-host').value.trim() || '127.0.0.1',
-        port: +$('#c-lp-port').value || 10808,
-      },
-      proxy: {
-        enabled: $('#c-proxy-enabled').value === 'true',
-        host: $('#c-proxy-host').value,
-        port: +$('#c-proxy-port').value || 1000,
-        username: $('#c-proxy-user').value,
-        protocol: $('#c-proxy-proto').value || 'http',
-      },
-      ai: {
-        endpoint: $('#c-ai-endpoint').value.trim(),
-        model: $('#c-ai-model').value.trim(),
-      },
-    };
-
-    const proxyPwd = $('#c-proxy-pass').value;
-    if (proxyPwd) update.proxy.password = proxyPwd;
-
-    const aiKey = $('#c-ai-key').value;
-    if (aiKey) update.ai.apiKey = aiKey;
-
-    const webpwd = $('#c-webpwd').value;
-    if (webpwd) update.webPassword = webpwd;
-
     try {
-      await api('/config', { method: 'PUT', body: update });
+      await api('/config', { method: 'PUT', body: { projects: updatedProjects } });
       clearClientCache();
       toast(t('configSaved'));
-    } catch (e) {
-      toast(t('saveFailed') + e.message);
-    }
+    } catch (e) { toast(t('saveFailed') + e.message); }
   };
   $('#save-config').onclick = doSave;
   $('#save-config-float').onclick = doSave;
-
-  $('#test-ai').onclick = async () => {
-    const result = $('#test-ai-result');
-    result.textContent = t('testAiTesting');
-    result.style.color = 'var(--text-muted)';
-    try {
-      const res = await api('/ai-test');
-      const d = await res.json();
-      if (d.ok) {
-        result.textContent = t('testAiOk') + (d.model ? ` (${d.model})` : '');
-        result.style.color = '#4caf50';
-      } else {
-        result.textContent = t('testAiFail') + (d.error || 'unknown');
-        result.style.color = '#e53935';
-      }
-    } catch (e) {
-      result.textContent = t('testAiFail') + e.message;
-      result.style.color = '#e53935';
-    }
-  };
-
-  $('#reanalyze-btn').onclick = async () => {
-    const cards = document.querySelectorAll('.project-card');
-    const projects = currentProject ? [currentProject] : [...cards].map(c => c.querySelector('.p-id').value.trim()).filter(Boolean);
-    if (!projects.length) { toast('无可用项目'); return; }
-    const btn = $('#reanalyze-btn');
-    btn.textContent = '...';
-    btn.disabled = true;
-    try {
-      for (const proj of projects) {
-        await api('/reanalyze', { method: 'POST', body: { project: proj } });
-      }
-      clearClientCache();
-      toast(t('reanalyzeOk'));
-    } catch (e) { toast(e.message); }
-    btn.textContent = t('reanalyze');
-    btn.disabled = false;
-  };
 }
 
 // --- Helpers ---
@@ -1254,5 +1297,8 @@ function esc(s) {
 }
 
 // --- Boot ---
-window.addEventListener('hashchange', route);
+window.addEventListener('hashchange', () => {
+  const hash = location.hash.slice(1);
+  if (hash.startsWith('report/')) route();
+});
 init();
