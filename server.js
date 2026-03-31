@@ -30,9 +30,9 @@ app.use((req, res, next) => {
   next();
 });
 
-// Static files with cache
+// Static files - no cache for development, etag for revalidation
 app.use(express.static(path.join(__dirname, 'public'), {
-  maxAge: '1h',
+  maxAge: 0,
   etag: true,
 }));
 
