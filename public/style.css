@@ -60,6 +60,7 @@ nav {
 .nav-refresh:hover { color: var(--primary) !important; }
 .nav-refresh.spinning { animation: spin .6s ease; }
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.btn-spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: spin .8s linear infinite; margin-right: 6px; vertical-align: middle; }
 .nav-link.active::after {
   content: ''; position: absolute; bottom: -1px; left: 50%; transform: translateX(-50%);
   width: 20px; height: 2px; background: var(--primary); border-radius: 2px;

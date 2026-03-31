@@ -49,7 +49,7 @@ const i18n = {
     sortActivity: '最活跃', sortRecent: '最近活跃',
     totalActivity: '总互动', posts: '帖子', comments: '评论', avgScore: '平均分',
     firstSeen: '首次出现', lastSeen: '最近活跃', accountAge: '账龄',
-    genSummary: '生成汇总报告', reportGenerated: '报告已生成',
+    genSummary: '生成汇总报告', reportGenerated: '报告已生成', generating: ' 生成中，约1分钟...',
     products: '产品', uploadXlsx: '上传产品表格', addProduct: '+ 手动添加',
     selectAll: '全选', batchDelete: '批量删除', batchDeleteConfirm: '确定删除选中的 {n} 个产品？',
     deleteOneConfirm: '确定删除「{name}」？', cancelBtn: '取消', confirmDelete: '删除',
@@ -108,7 +108,7 @@ const i18n = {
     sortActivity: 'Most Active', sortRecent: 'Recently Active',
     totalActivity: 'Total', posts: 'Posts', comments: 'Comments', avgScore: 'Avg Score',
     firstSeen: 'First Seen', lastSeen: 'Last Active', accountAge: 'Account Age',
-    genSummary: 'Generate Summary Report', reportGenerated: 'Report generated',
+    genSummary: 'Generate Summary Report', reportGenerated: 'Report generated', generating: ' Generating (~1 min)...',
     products: 'Products', uploadXlsx: 'Upload Specs XLSX', addProduct: '+ Add Product',
     selectAll: 'Select All', batchDelete: 'Delete Selected', batchDeleteConfirm: 'Delete {n} selected products?',
     deleteOneConfirm: 'Delete "{name}"?', cancelBtn: 'Cancel', confirmDelete: 'Delete',
@@ -501,8 +501,8 @@ async function renderReports() {
 
   document.querySelectorAll('.regen-btn').forEach(btn => {
     btn.onclick = async () => {
-      btn.textContent = '...';
       btn.disabled = true;
+      btn.innerHTML = '<span class="btn-spinner"></span>' + t('generating');
       try {
         await api(`/reports/regenerate`, { method: 'POST', body: { date: btn.dataset.date, project: btn.dataset.project } });
         clearClientCache();
@@ -521,8 +521,8 @@ async function renderReports() {
     const proj = getProjectId();
     if (!proj || proj === 'default') { toast('无可用项目'); return; }
     const btn = $('#gen-summary');
-    btn.textContent = '...';
     btn.disabled = true;
+    btn.innerHTML = '<span class="btn-spinner"></span>' + t('generating');
     try {
       const res = await api('/reports/summary', { method: 'POST', body: { project: proj } });
       const d = await res.json();
@@ -1001,7 +1001,7 @@ async function renderConfig() {
       </div>
       <div style="margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <button class="btn btn-outline btn-sm" id="test-ai">${t('testAi')}</button>
-        <button class="btn btn-outline btn-sm" id="reanalyze-btn">${t('reanalyze')}</button>
+        <button class="btn btn-outline btn-sm" id="reanalyze-btn" style="display:none">${t('reanalyze')}</button>
         <span id="test-ai-result" style="font-size:13px"></span>
       </div>
     </div>
