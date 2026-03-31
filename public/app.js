@@ -1,6 +1,5 @@
 const $ = s => document.querySelector(s);
 const app = $('#app');
-const navbar = $('#navbar');
 let currentPlatform = localStorage.getItem('rm-platform') || 'reddit';
 let currentTab = 'stats';
 
@@ -138,10 +137,8 @@ let projectList = [];
 function t(key) { return i18n[lang]?.[key] || i18n.en[key] || key; }
 
 function updateNav() {
-  $('#nav-logout').textContent = t('logout');
-  $('#lang-btn').textContent = t('langSwitch');
-  $('.nav-brand').textContent = t('title');
-  $('#sidebar-settings').textContent = t('settings');
+  const ss = $('#sidebar-settings');
+  if (ss) ss.textContent = t('settings');
   updateProjectSelector();
   updateSidebar();
   updateTabs();
@@ -261,8 +258,8 @@ async function init() {
     const res = await fetch('/api/me');
     if (res.ok) {
       $('#login-container').style.display = 'none';
-      navbar.style.display = 'flex';
       $('#layout').style.display = 'flex';
+      bindSidebarActions();
       await loadProjects();
       updateNav();
 
@@ -294,7 +291,7 @@ async function init() {
 
 // --- Login ---
 function showLogin() {
-  navbar.style.display = 'none';
+  // hide layout
   if ($('#layout')) $('#layout').style.display = 'none';
   const loginContainer = $('#login-container');
   loginContainer.style.display = 'block';
@@ -313,7 +310,7 @@ function showLogin() {
     const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pwd }) });
     if (res.ok) {
       $('#login-container').style.display = 'none';
-      navbar.style.display = 'flex';
+      // show layout
       $('#layout').style.display = 'flex';
       await loadProjects();
       apiCached('/stats').catch(()=>{});
@@ -333,17 +330,19 @@ function toggleLang() {
   updateNav();
 }
 
-$('#nav-logout').onclick = async (e) => { e.preventDefault(); await fetch('/api/logout', { method: 'POST' }); showLogin(); };
-$('#lang-btn').onclick = (e) => { e.preventDefault(); toggleLang(); route(); };
-$('#nav-refresh').onclick = async (e) => {
-  e.preventDefault();
-  const btn = $('#nav-refresh');
-  btn.classList.add('spinning');
-  clearClientCache();
-  try { await api('/refresh', { method: 'POST' }); } catch {}
-  setTimeout(() => btn.classList.remove('spinning'), 600);
-  route();
-};
+function bindSidebarActions() {
+  const logout = $('#nav-logout');
+  if (logout) logout.onclick = async (e) => { e.preventDefault(); await fetch('/api/logout', { method: 'POST' }); showLogin(); };
+  const langBtn = $('#lang-btn');
+  if (langBtn) langBtn.onclick = (e) => { e.preventDefault(); toggleLang(); route(); };
+  const refreshBtn = $('#nav-refresh');
+  if (refreshBtn) refreshBtn.onclick = async (e) => {
+    e.preventDefault();
+    clearClientCache();
+    try { await api('/refresh', { method: 'POST' }); } catch {}
+    route();
+  };
+}
 
 
 // --- Sentiment helpers ---

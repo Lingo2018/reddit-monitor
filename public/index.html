@@ -8,31 +8,36 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <nav id="navbar" style="display:none">
-    <div class="nav-brand">Social Monitor</div>
-    <div class="nav-links">
-      <a href="#" class="nav-link nav-refresh" id="nav-refresh" title="Refresh">&#8635;</a>
-      <a href="#" class="nav-link" id="lang-btn">EN</a>
-      <a href="#" class="nav-link" id="nav-logout">退出</a>
-    </div>
-  </nav>
   <div id="login-container"></div>
   <div id="layout" style="display:none">
     <div id="sidebar">
-      <div class="sidebar-section">
-        <div class="sidebar-item" data-platform="reddit">
-          <span class="sidebar-icon">&#9677;</span> Reddit
-        </div>
-        <div id="project-selector-wrap" style="padding:2px 12px 8px 32px">
-          <select id="project-selector" class="sidebar-select"></select>
-        </div>
-        <div class="sidebar-item" data-platform="facebook">
-          <span class="sidebar-icon">&#9673;</span> Facebook
-        </div>
+      <div class="sidebar-logo">
+        <span class="logo-icon">&#9678;</span>
+        <span class="logo-text">Social Monitor</span>
       </div>
-      <div class="sidebar-section" style="margin-top:auto">
-        <div class="sidebar-item" data-platform="settings">
-          <span class="sidebar-icon">&#9881;</span> <span id="sidebar-settings">设置</span>
+      <div class="sidebar-label">PLATFORMS</div>
+      <div class="sidebar-item" data-platform="reddit">
+        <svg class="sidebar-svg" viewBox="0 0 20 20" fill="currentColor"><circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="7" cy="9" r="1.5"/><circle cx="13" cy="9" r="1.5"/><path d="M7 13c0 0 1.2 2 3 2s3-2 3-2" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+        <span>Reddit</span>
+      </div>
+      <div id="project-selector-wrap">
+        <select id="project-selector" class="sidebar-select"></select>
+      </div>
+      <div class="sidebar-item" data-platform="facebook">
+        <svg class="sidebar-svg" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a8 8 0 00-1.25 15.9v-5.65H6.7V10h2.05V8.4c0-2 1.2-3.1 3-3.1.87 0 1.78.15 1.78.15v1.96h-1c-1 0-1.3.62-1.3 1.25V10h2.22l-.36 2.25h-1.86v5.65A8 8 0 0010 2z"/></svg>
+        <span>Facebook</span>
+      </div>
+      <div class="sidebar-divider"></div>
+      <div class="sidebar-label">SYSTEM</div>
+      <div class="sidebar-item" data-platform="settings">
+        <svg class="sidebar-svg" viewBox="0 0 20 20" fill="currentColor"><path d="M10 13a3 3 0 100-6 3 3 0 000 6z" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M17.2 10c0-.4-.3-.7-.6-1l.5-1.5-1-1-1.5.5c-.3-.3-.7-.5-1-.6L13 5h-1.5l-.6 1.4c-.4.1-.7.3-1 .6L8.4 6.5l-1 1 .5 1.5c-.3.3-.5.6-.6 1L6 10.5V12l1.4.6c.1.4.3.7.6 1l-.5 1.5 1 1 1.5-.5c.3.3.7.5 1 .6L11.5 17H13l.6-1.4c.4-.1.7-.3 1-.6l1.5.5 1-1-.5-1.5c.3-.3.5-.7.6-1l1.4-.5V10z" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
+        <span id="sidebar-settings">设置</span>
+      </div>
+      <div class="sidebar-bottom">
+        <div class="sidebar-actions">
+          <a href="#" id="nav-refresh" class="sidebar-action" title="刷新">&#8635;</a>
+          <a href="#" id="lang-btn" class="sidebar-action">EN</a>
+          <a href="#" id="nav-logout" class="sidebar-action">&#10145;</a>
         </div>
       </div>
     </div>
