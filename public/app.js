@@ -260,6 +260,7 @@ async function init() {
   try {
     const res = await fetch('/api/me');
     if (res.ok) {
+      $('#login-container').style.display = 'none';
       navbar.style.display = 'flex';
       $('#layout').style.display = 'flex';
       await loadProjects();
@@ -295,7 +296,9 @@ async function init() {
 function showLogin() {
   navbar.style.display = 'none';
   if ($('#layout')) $('#layout').style.display = 'none';
-  app.innerHTML = `
+  const loginContainer = $('#login-container');
+  loginContainer.style.display = 'block';
+  loginContainer.innerHTML = `
     <div class="login-wrap">
       <div class="login-card">
         <h2>${t('title')}</h2>
@@ -309,6 +312,7 @@ function showLogin() {
     const pwd = $('#login-pwd').value;
     const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pwd }) });
     if (res.ok) {
+      $('#login-container').style.display = 'none';
       navbar.style.display = 'flex';
       $('#layout').style.display = 'flex';
       await loadProjects();
