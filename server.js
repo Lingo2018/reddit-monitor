@@ -193,15 +193,17 @@ app.get('/api/stats', auth, (req, res) => {
       GROUP BY day ORDER BY day
     `).all(...p, since30d);
 
-    // Analysis stats
-    const aw = []; const ap = [];
-    if (project) { aw.push('a.project = ?'); ap.push(project); }
-    const awhere = aw.length ? 'WHERE ' + aw.join(' AND ') : '';
-    const awhereAnd = aw.length ? 'WHERE ' + aw.join(' AND ') + ' AND' : 'WHERE';
+    // Analysis stats (join mentions for platform filter)
+    const aw2 = []; const ap2 = [];
+    if (project) { aw2.push('m.project = ?'); ap2.push(project); }
+    if (platform) { aw2.push('m.platform = ?'); ap2.push(platform); }
+    const awhere2 = aw2.length ? 'WHERE ' + aw2.join(' AND ') : '';
+    const awhere2And = aw2.length ? 'WHERE ' + aw2.join(' AND ') + ' AND' : 'WHERE';
+    const aJoin = 'FROM analysis a JOIN mentions m ON a.mention_id = m.id AND a.project = m.project';
 
-    const sentiments = db.prepare(`SELECT a.sentiment, COUNT(*) as count FROM analysis a ${awhere} GROUP BY a.sentiment`).all(...ap);
-    const analyzed = db.prepare(`SELECT COUNT(*) as c FROM analysis a ${awhere}`).get(...ap).c;
-    const actionable = db.prepare(`SELECT COUNT(*) as c FROM analysis a ${awhereAnd} a.actionable = 1`).get(...ap).c;
+    const sentiments = db.prepare(`SELECT a.sentiment, COUNT(*) as count ${aJoin} ${awhere2} GROUP BY a.sentiment`).all(...ap2);
+    const analyzed = db.prepare(`SELECT COUNT(*) as c ${aJoin} ${awhere2}`).get(...ap2).c;
+    const actionable = db.prepare(`SELECT COUNT(*) as c ${aJoin} ${awhere2And} a.actionable = 1`).get(...ap2).c;
 
     return { total, unread, byCategory, topSubs, byDay, byDayDetail, recentPolls, sentiments, analyzed, actionable };
   } catch(e) { console.error('[stats]', e.message); return { total:0, unread:0, byCategory:[], topSubs:[], byDay:[], byDayDetail:[], recentPolls:[], sentiments:[], analyzed:0, actionable:0 }; } });
