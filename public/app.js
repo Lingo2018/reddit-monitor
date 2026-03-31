@@ -361,8 +361,10 @@ function sentimentBadge(s) {
 // --- Stats ---
 async function renderStats() {
   app.innerHTML = skeleton(4);
-  const pq = currentProject ? `?project=${currentProject}` : '';
-  const d = await apiCached('/stats' + pq);
+  const sp = new URLSearchParams();
+  if (currentProject) sp.set('project', currentProject);
+  if (currentPlatform !== 'settings') sp.set('platform', currentPlatform);
+  const d = await apiCached('/stats?' + sp.toString());
 
   const catMap = {};
   d.byCategory.forEach(c => catMap[c.category] = c.count);
@@ -437,6 +439,7 @@ async function renderData() {
   app.innerHTML = skeleton(6);
   const qObj = { ...dataState, limit: 50 };
   if (currentProject) qObj.project = currentProject;
+  if (currentPlatform !== 'settings') qObj.platform = currentPlatform;
   const q = new URLSearchParams(qObj).toString();
   const d = await apiCached('/mentions-analyzed?' + q);
 

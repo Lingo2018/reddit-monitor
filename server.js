@@ -161,20 +161,24 @@ app.get('/api/ai-test', auth, async (req, res) => {
 
 // --- Combined Stats (one request instead of two) ---
 app.get('/api/stats', auth, (req, res) => {
-  const { project } = req.query;
-  const cacheKey = `stats:${project || 'all'}`;
+  const { project, platform } = req.query;
+  const cacheKey = `stats:${project || 'all'}:${platform || 'all'}`;
 
   const result = cached(cacheKey, 30000, () => { try {
     const since30d = new Date(Date.now() - 30 * 86400000).toISOString();
+    const w = []; const p = [];
+    if (project) { w.push('m.project = ?'); p.push(project); }
+    if (platform) { w.push('m.platform = ?'); p.push(platform); }
+    const where = w.length ? 'WHERE ' + w.join(' AND ') : '';
+    const whereAnd = w.length ? 'WHERE ' + w.join(' AND ') + ' AND' : 'WHERE';
 
-    const total = project ? SQL.mentionCountByProject.get(project).c : SQL.mentionCount.get().c;
-    const unread = project ? SQL.unreadCountByProject.get(project).c : SQL.unreadCount.get().c;
-    const byCategory = project ? SQL.byCategoryByProject.all(project) : SQL.byCategory.all();
-    const topSubs = project ? SQL.topSubsByProject.all(project) : SQL.topSubs.all();
+    const total = db.prepare(`SELECT COUNT(*) as c FROM mentions m ${where}`).get(...p).c;
+    const unread = db.prepare(`SELECT COUNT(*) as c FROM mentions m ${whereAnd} m.is_read = 0`).get(...p).c;
+    const byCategory = db.prepare(`SELECT category, COUNT(*) as count FROM mentions m ${where} GROUP BY category`).all(...p);
+    const topSubs = db.prepare(`SELECT subreddit, COUNT(*) as count FROM mentions m ${where} GROUP BY subreddit ORDER BY count DESC LIMIT 10`).all(...p);
     const recentPolls = SQL.recentPolls.all();
-    const byDay = project ? SQL.byDayByProject.all(project, since30d) : SQL.byDay.all(since30d);
+    const byDay = db.prepare(`SELECT date(discovered_at) as day, COUNT(*) as count FROM mentions m ${whereAnd} m.discovered_at >= ? GROUP BY day ORDER BY day`).all(...p, since30d);
 
-    // Detailed daily breakdown: posts, comments, sentiment, hot posts
     const byDayDetail = db.prepare(`
       SELECT date(m.discovered_at) as day,
         SUM(CASE WHEN m.type='post' THEN 1 ELSE 0 END) as posts,
@@ -185,14 +189,19 @@ app.get('/api/stats', auth, (req, res) => {
         SUM(CASE WHEN m.type='post' AND m.score >= 10 THEN 1 ELSE 0 END) as hot_posts
       FROM mentions m
       LEFT JOIN analysis a ON m.id = a.mention_id AND m.project = a.project
-      ${project ? 'WHERE m.project = ? AND' : 'WHERE'} m.discovered_at >= ?
+      ${whereAnd} m.discovered_at >= ?
       GROUP BY day ORDER BY day
-    `).all(...(project ? [project, since30d] : [since30d]));
+    `).all(...p, since30d);
 
-    // Analysis stats (merged)
-    const sentiments = project ? SQL.sentimentsByProject.all(project) : SQL.sentiments.all();
-    const analyzed = project ? SQL.analyzedCountByProject.get(project).c : SQL.analyzedCount.get().c;
-    const actionable = project ? SQL.actionableCountByProject.get(project).c : SQL.actionableCount.get().c;
+    // Analysis stats
+    const aw = []; const ap = [];
+    if (project) { aw.push('a.project = ?'); ap.push(project); }
+    const awhere = aw.length ? 'WHERE ' + aw.join(' AND ') : '';
+    const awhereAnd = aw.length ? 'WHERE ' + aw.join(' AND ') + ' AND' : 'WHERE';
+
+    const sentiments = db.prepare(`SELECT a.sentiment, COUNT(*) as count FROM analysis a ${awhere} GROUP BY a.sentiment`).all(...ap);
+    const analyzed = db.prepare(`SELECT COUNT(*) as c FROM analysis a ${awhere}`).get(...ap).c;
+    const actionable = db.prepare(`SELECT COUNT(*) as c FROM analysis a ${awhereAnd} a.actionable = 1`).get(...ap).c;
 
     return { total, unread, byCategory, topSubs, byDay, byDayDetail, recentPolls, sentiments, analyzed, actionable };
   } catch(e) { console.error('[stats]', e.message); return { total:0, unread:0, byCategory:[], topSubs:[], byDay:[], byDayDetail:[], recentPolls:[], sentiments:[], analyzed:0, actionable:0 }; } });
