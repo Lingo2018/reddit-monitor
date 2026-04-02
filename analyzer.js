@@ -177,24 +177,23 @@ export async function generateDailyReport(config, project, stats, productInfo) {
 - 情感分布：正面 ${stats.positive}、负面 ${stats.negative}、中性 ${stats.neutral}
 - 可执行反馈：${stats.actionable} 条
 
-主要负面问题/缺点：
-${stats.topCons.map((c, i) => `${i + 1}. ${c.text}（${c.count} 次提及）`).join('\n') || '无'}
+主要负面问题（Top 5）：
+${stats.topCons.slice(0, 5).map((c, i) => `${i + 1}. ${c.text}（${c.count} 次）`).join('\n') || '无'}
 
-主要正面评价/优点：
-${stats.topPros.map((c, i) => `${i + 1}. ${c.text}（${c.count} 次提及）`).join('\n') || '无'}
+主要正面评价（Top 5）：
+${stats.topPros.slice(0, 5).map((c, i) => `${i + 1}. ${c.text}（${c.count} 次）`).join('\n') || '无'}
 
-高相关度评论摘要：
-${stats.samples.map((s, i) => `${i + 1}. [${s.sentiment}] ${s.summary}${s.permalink ? ' → https://reddit.com' + s.permalink : ''}`).join('\n') || '无'}
+高相关度评论（Top 5）：
+${stats.samples.slice(0, 5).map((s, i) => `${i + 1}. [${s.sentiment}] ${s.summary}${s.permalink ? ' → https://reddit.com' + s.permalink : ''}`).join('\n') || '无'}
 
-需要关注的负面反馈（附链接）：
-${(stats.negativeItems || []).map((n, i) => `${i + 1}. ${n.summary} (u/${n.author}) → https://reddit.com${n.permalink}`).join('\n') || '无'}
+负面反馈（Top 5，附链接）：
+${(stats.negativeItems || []).slice(0, 5).map((n, i) => `${i + 1}. ${n.summary} → https://reddit.com${n.permalink}`).join('\n') || '无'}
 
-${productInfo ? `\n我方产品线信息（用于匹配用户讨论的具体产品）：\n${productInfo}\n` : ''}
-请按以下结构撰写报告：
-1. 今日概况（核心指标一览）
-2. 正面反馈亮点${productInfo ? '（标注涉及的具体产品型号）' : ''}
-3. 负面反馈与风险预警（请保留原始 Reddit 链接，方便直接跳转回复）${productInfo ? '（标注涉及的具体产品型号）' : ''}
-4. 运营建议与行动项
+请按以下结构撰写报告（800字以内）：
+1. 今日概况
+2. 正面反馈亮点
+3. 负面反馈与风险（保留 Reddit 链接）
+4. 运营建议
 5. 总结`;
 
   try {
@@ -226,17 +225,17 @@ export async function generateSummaryReport(config, project, stats, productInfo)
 - 情感分布：正面 ${stats.positive}、负面 ${stats.negative}、中性 ${stats.neutral}
 - 可执行反馈：${stats.actionable} 条
 
-累计高频负面问题（按提及次数排序）：
-${stats.topCons.map((c, i) => `${i + 1}. ${c.text}（${c.count} 次）`).join('\n') || '无'}
+高频负面问题（Top 8）：
+${stats.topCons.slice(0, 8).map((c, i) => `${i + 1}. ${c.text}（${c.count} 次）`).join('\n') || '无'}
 
-累计高频正面评价（按提及次数排序）：
-${stats.topPros.map((c, i) => `${i + 1}. ${c.text}（${c.count} 次）`).join('\n') || '无'}
+高频正面评价（Top 8）：
+${stats.topPros.slice(0, 8).map((c, i) => `${i + 1}. ${c.text}（${c.count} 次）`).join('\n') || '无'}
 
-高相关度评论摘要：
-${stats.samples.map((s, i) => `${i + 1}. [${s.sentiment}] ${s.summary}${s.permalink ? ' → https://reddit.com' + s.permalink : ''}`).join('\n') || '无'}
+高相关度评论（Top 8）：
+${stats.samples.slice(0, 8).map((s, i) => `${i + 1}. [${s.sentiment}] ${s.summary}${s.permalink ? ' → https://reddit.com' + s.permalink : ''}`).join('\n') || '无'}
 
-需要关注的负面反馈（附链接）：
-${(stats.negativeItems || []).map((n, i) => `${i + 1}. ${n.summary} (u/${n.author}) → https://reddit.com${n.permalink}`).join('\n') || '无'}
+负面反馈（Top 8，附链接）：
+${(stats.negativeItems || []).slice(0, 8).map((n, i) => `${i + 1}. ${n.summary} → https://reddit.com${n.permalink}`).join('\n') || '无'}
 
 ${productInfo ? `\n我方产品线信息：\n${productInfo}\n` : ''}
 请按以下结构撰写汇总报告（在负面反馈部分请保留 Reddit 原始链接，方便直接跳转回复）：
