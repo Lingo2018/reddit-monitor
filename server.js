@@ -381,7 +381,7 @@ app.post('/api/reports/regenerate', auth, async (req, res) => {
       report = await generateDailyReport(cfg.ai, proj, stats, productInfo);
     }
 
-    if (!report) return res.status(500).json({ error: 'report generation failed' });
+    if (!report) return res.status(500).json({ error: '报告生成失败，可能是 AI 模型无法处理当前数据量。建议：1) 在设置中更换更大的模型 2) 检查 AI API 连接' });
 
     const { saveDailyReport } = await import('./db.js');
     db.prepare('DELETE FROM daily_reports WHERE report_date = ? AND project = ?').run(date, project);
@@ -557,7 +557,7 @@ app.post('/api/reports/summary', auth, async (req, res) => {
 
     const productInfo = getProductsForPrompt(project);
     const report = await generateSummaryReport(cfg.ai, proj, stats, productInfo);
-    if (!report) return res.status(500).json({ error: 'report generation failed' });
+    if (!report) return res.status(500).json({ error: '报告生成失败，可能是 AI 模型无法处理当前数据量。建议：1) 在设置中更换更大的模型 2) 检查 AI API 连接' });
 
     const today = new Date().toISOString().slice(0, 10);
     const reportDate = `summary-${today}`;
