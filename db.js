@@ -118,6 +118,47 @@ export function existsId(id) {
   return !!db.prepare('SELECT 1 FROM mentions WHERE id = ?').get(id);
 }
 
+// --- Accounts table (app users) ---
+db.exec(`
+  CREATE TABLE IF NOT EXISTS accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    salt TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'user',
+    created_at TEXT,
+    last_login TEXT
+  );
+`);
+
+export function createAccount(data) {
+  return db.prepare('INSERT INTO accounts (username, password_hash, salt, role, created_at) VALUES (@username, @password_hash, @salt, @role, @created_at)').run(data);
+}
+
+export function getAccountByUsername(username) {
+  return db.prepare('SELECT * FROM accounts WHERE username = ?').get(username);
+}
+
+export function listAccounts() {
+  return db.prepare('SELECT id, username, role, created_at, last_login FROM accounts ORDER BY id').all();
+}
+
+export function deleteAccount(id) {
+  return db.prepare('DELETE FROM accounts WHERE id = ?').run(id);
+}
+
+export function updateAccountPassword(id, hash, salt) {
+  return db.prepare('UPDATE accounts SET password_hash = ?, salt = ? WHERE id = ?').run(hash, salt, id);
+}
+
+export function updateLastLogin(id) {
+  return db.prepare('UPDATE accounts SET last_login = ? WHERE id = ?').run(new Date().toISOString(), id);
+}
+
+export function countAdmins() {
+  return db.prepare("SELECT COUNT(*) as c FROM accounts WHERE role = 'admin'").get().c;
+}
+
 // --- Users table (karma cache) ---
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (

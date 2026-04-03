@@ -259,6 +259,16 @@ process.on('unhandledRejection', (err) => {
 
 log('Reddit Monitor 启动');
 const initConfig = loadConfig();
+
+// Seed admin account on first boot
+const { getAccountByUsername: getAcct, createAccount: createAcct } = await import('./db.js');
+const { hashPassword: hashPwd } = await import('./auth-utils.js');
+if (!getAcct('admin')) {
+  const pwd = initConfig.webPassword || 'admin';
+  const { hash, salt } = await hashPwd(pwd);
+  createAcct({ username: 'admin', password_hash: hash, salt, role: 'admin', created_at: new Date().toISOString() });
+  log(`初始管理员账号已创建: admin / ${pwd}`);
+}
 const webPort = initConfig.webPort || 3000;
 app.listen(webPort, () => log(`Web UI: http://localhost:${webPort}`));
 log(`项目: ${initConfig.projects.map(p => p.id).join(', ') || '无'}`);

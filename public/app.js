@@ -2,6 +2,7 @@ const $ = s => document.querySelector(s);
 const app = $('#app');
 let currentPlatform = localStorage.getItem('rm-platform') || 'reddit';
 let currentTab = 'stats';
+let currentUser = { username: '', role: 'user' };
 
 // --- i18n ---
 const i18n = {
@@ -9,6 +10,8 @@ const i18n = {
     title: 'Social Monitor',
     stats: '概览', data: '数据', reports: '报告', config: '配置', logout: '退出', settings: '设置',
     fbGroups: 'Facebook Groups（groupId:名称，每行一个）', fbToken: 'Access Token', fbAppId: 'App ID', fbAppSecret: 'App Secret',
+    username: '用户名', accounts: '账号管理', addUser: '添加用户', resetPassword: '重置密码',
+    newPassword: '新密码', role: '角色',
     fbSetting: 'Facebook 设置', testToken: '测试 Token', tokenValid: 'Token 有效', tokenInvalid: 'Token 无效',
     exchangeToken: '延长 Token', exchangeOk: 'Token 已延长',
     password: '请输入密码', login: '登录', wrongPwd: '密码错误',
@@ -71,6 +74,8 @@ const i18n = {
     title: 'Social Monitor',
     stats: 'Stats', data: 'Data', reports: 'Reports', config: 'Config', logout: 'Logout', settings: 'Settings',
     fbGroups: 'Facebook Groups (groupId:name, one per line)', fbToken: 'Access Token', fbAppId: 'App ID', fbAppSecret: 'App Secret',
+    username: 'Username', accounts: 'Accounts', addUser: 'Add User', resetPassword: 'Reset Password',
+    newPassword: 'New Password', role: 'Role',
     fbSetting: 'Facebook Settings', testToken: 'Test Token', tokenValid: 'Token valid', tokenInvalid: 'Token invalid',
     exchangeToken: 'Extend Token', exchangeOk: 'Token extended',
     password: 'Password', login: 'Login', wrongPwd: 'Wrong password',
@@ -261,6 +266,8 @@ async function init() {
   try {
     const res = await fetch('/api/me');
     if (res.ok) {
+      const me = await res.json();
+      currentUser = { username: me.username, role: me.role };
       $('#login-container').style.display = 'none';
       $('#layout').style.display = 'flex';
       bindSidebarActions();
@@ -295,7 +302,6 @@ async function init() {
 
 // --- Login ---
 function showLogin() {
-  // hide layout
   if ($('#layout')) $('#layout').style.display = 'none';
   const loginContainer = $('#login-container');
   loginContainer.style.display = 'block';
@@ -304,20 +310,23 @@ function showLogin() {
       <div class="login-card">
         <h2>${t('title')}</h2>
         <div class="login-error" id="login-err"></div>
-        <input type="password" id="login-pwd" placeholder="${t('password')}" autocomplete="off" autofocus>
+        <input type="text" id="login-user" placeholder="${t('username')}" autocomplete="username" autofocus>
+        <input type="password" id="login-pwd" placeholder="${t('password')}" autocomplete="current-password">
         <button id="login-btn">${t('login')}</button>
         <div style="margin-top:12px"><a href="#" id="login-lang" style="color:var(--text-muted);font-size:12px">${t('langSwitch')}</a></div>
       </div>
     </div>`;
   const submit = async () => {
+    const username = $('#login-user').value;
     const pwd = $('#login-pwd').value;
-    const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pwd }) });
+    const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password: pwd }) });
     if (res.ok) {
+      const d = await res.json();
+      currentUser = { username: d.username, role: d.role };
       $('#login-container').style.display = 'none';
-      // show layout
       $('#layout').style.display = 'flex';
+      bindSidebarActions();
       await loadProjects();
-      apiCached('/stats').catch(()=>{});
       updateNav();
       currentTab = 'stats'; route();
     }
@@ -1167,12 +1176,75 @@ async function renderGlobalSettings() {
       <div class="form-group"><label>${t('webPwd')}</label><input id="c-webpwd" type="password" value="" autocomplete="new-password" placeholder="${t('unchangedHint')}"></div>
     </div>
 
+    ${currentUser.role === 'admin' ? `
+    <div class="section">
+      <h3>${t('accounts')}</h3>
+      <div id="accounts-list"></div>
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input id="new-acc-user" placeholder="${t('username')}" autocomplete="off" style="padding:6px 10px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px">
+        <input id="new-acc-pwd" type="password" placeholder="${t('password')}" autocomplete="new-password" style="padding:6px 10px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px">
+        <select id="new-acc-role" style="padding:6px 10px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px">
+          <option value="user">user</option>
+          <option value="admin">admin</option>
+        </select>
+        <button class="btn btn-primary btn-sm" id="add-acc-btn">${t('addUser')}</button>
+      </div>
+    </div>` : ''}
+
     <div style="margin-top:16px">
       <button class="btn btn-primary" id="save-global">${t('saveConfig')}</button>
     </div>
     <div class="floating-save">
       <button class="btn btn-primary" id="save-global-float">${t('saveConfig')}</button>
     </div>`;
+
+  // Load accounts list (admin only)
+  if (currentUser.role === 'admin') {
+    try {
+      const accounts = await api('/accounts').then(r => r.json());
+      $('#accounts-list').innerHTML = `<table><thead><tr><th>${t('username')}</th><th>${t('role')}</th><th>${t('time')}</th><th></th></tr></thead><tbody>${accounts.map(a => `<tr>
+        <td>${esc(a.username)}</td>
+        <td>${a.role}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${a.last_login ? fmtTime(a.last_login) : '-'}</td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-outline btn-sm reset-pwd-btn" data-id="${a.id}" data-name="${esc(a.username)}">${t('resetPassword')}</button>
+          ${a.id !== currentUser.userId ? `<button class="btn btn-outline btn-sm del-acc-btn" data-id="${a.id}" data-name="${esc(a.username)}" style="margin-left:4px;color:var(--red)">${t('deleteProject')}</button>` : ''}
+        </td>
+      </tr>`).join('')}</tbody></table>`;
+
+      document.querySelectorAll('.reset-pwd-btn').forEach(btn => {
+        btn.onclick = async () => {
+          const newPwd = prompt(t('newPassword') + ' (' + btn.dataset.name + ')');
+          if (!newPwd) return;
+          const res = await api('/accounts/' + btn.dataset.id + '/reset-password', { method: 'POST', body: { password: newPwd } });
+          const d = await res.json();
+          if (d.ok) toast(t('configSaved'));
+          else toast(d.error);
+        };
+      });
+
+      document.querySelectorAll('.del-acc-btn').forEach(btn => {
+        btn.onclick = async () => {
+          if (!confirm(t('deleteOneConfirm').replace('{name}', btn.dataset.name))) return;
+          const res = await api('/accounts/' + btn.dataset.id, { method: 'DELETE' });
+          const d = await res.json();
+          if (d.ok) { clearClientCache(); renderGlobalSettings(); }
+          else toast(d.error);
+        };
+      });
+
+      $('#add-acc-btn').onclick = async () => {
+        const username = $('#new-acc-user').value.trim();
+        const password = $('#new-acc-pwd').value;
+        const role = $('#new-acc-role').value;
+        if (!username || !password) return;
+        const res = await api('/accounts', { method: 'POST', body: { username, password, role } });
+        const d = await res.json();
+        if (d.ok) { clearClientCache(); renderGlobalSettings(); }
+        else toast(d.error);
+      };
+    } catch {}
+  }
 
   const doSaveGlobal = async () => {
     const update = {

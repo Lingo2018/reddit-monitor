@@ -5,7 +5,8 @@ import zlib from 'zlib';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { loadConfig, saveConfig, getConfigForUI } from './config.js';
-import db, { getProducts, addProduct, updateProduct, deleteProduct } from './db.js';
+import db, { getProducts, addProduct, updateProduct, deleteProduct, getAccountByUsername, listAccounts, createAccount, deleteAccount, updateAccountPassword, updateLastLogin, countAdmins } from './db.js';
+import { hashPassword, verifyPassword } from './auth-utils.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const JWT_SECRET = crypto.randomBytes(32).toString('hex');
@@ -111,20 +112,84 @@ function getCookie(req, name) {
 function auth(req, res, next) {
   const token = getCookie(req, 'token');
   if (!token) return res.status(401).json({ error: 'unauthorized' });
-  try { jwt.verify(token, JWT_SECRET); next(); }
-  catch { return res.status(401).json({ error: 'unauthorized' }); }
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    req.user = { userId: payload.userId, username: payload.username, role: payload.role };
+    next();
+  } catch { return res.status(401).json({ error: 'unauthorized' }); }
 }
 
-app.post('/api/login', (req, res) => {
+function adminOnly(req, res, next) {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'forbidden' });
+  next();
+}
+
+// Helper: get project IDs accessible to current user
+function getUserProjectIds(req) {
   const cfg = loadConfig();
-  if (req.body.password !== (cfg.webPassword || 'admin')) return res.status(401).json({ error: 'wrong password' });
-  const token = jwt.sign({ ts: Date.now() }, JWT_SECRET, { expiresIn: '7d' });
+  if (req.user.role === 'admin') return cfg.projects.map(p => p.id);
+  return cfg.projects.filter(p => p.owner === req.user.username).map(p => p.id);
+}
+
+app.post('/api/login', async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).json({ error: 'username and password required' });
+
+  const account = getAccountByUsername(username);
+  if (!account) return res.status(401).json({ error: 'wrong credentials' });
+
+  const valid = await verifyPassword(password, account.password_hash, account.salt);
+  if (!valid) return res.status(401).json({ error: 'wrong credentials' });
+
+  updateLastLogin(account.id);
+  const token = jwt.sign({ userId: account.id, username: account.username, role: account.role }, JWT_SECRET, { expiresIn: '7d' });
   res.cookie('token', token, { httpOnly: true, maxAge: 7 * 86400000, sameSite: 'lax' });
-  res.json({ ok: true });
+  res.json({ ok: true, username: account.username, role: account.role });
 });
 
 app.post('/api/logout', (req, res) => { res.clearCookie('token'); res.json({ ok: true }); });
-app.get('/api/me', auth, (req, res) => res.json({ ok: true }));
+app.get('/api/me', auth, (req, res) => res.json({ ok: true, username: req.user.username, role: req.user.role }));
+
+// --- Account Management (admin only) ---
+app.get('/api/accounts', auth, adminOnly, (req, res) => { res.json(listAccounts()); });
+
+app.post('/api/accounts', auth, adminOnly, async (req, res) => {
+  const { username, password, role = 'user' } = req.body;
+  if (!username || !password) return res.status(400).json({ error: 'username and password required' });
+  if (password.length < 4) return res.status(400).json({ error: 'password too short (min 4)' });
+  if (getAccountByUsername(username)) return res.status(400).json({ error: 'username already exists' });
+  const { hash, salt } = await hashPassword(password);
+  createAccount({ username, password_hash: hash, salt, role, created_at: new Date().toISOString() });
+  res.json({ ok: true });
+});
+
+app.delete('/api/accounts/:id', auth, adminOnly, (req, res) => {
+  const id = +req.params.id;
+  if (id === req.user.userId) return res.status(400).json({ error: 'cannot delete yourself' });
+  const account = db.prepare('SELECT role FROM accounts WHERE id = ?').get(id);
+  if (account?.role === 'admin' && countAdmins() <= 1) return res.status(400).json({ error: 'cannot delete the last admin' });
+  deleteAccount(id);
+  res.json({ ok: true });
+});
+
+app.post('/api/accounts/:id/reset-password', auth, adminOnly, async (req, res) => {
+  const { password } = req.body;
+  if (!password || password.length < 4) return res.status(400).json({ error: 'password too short (min 4)' });
+  const { hash, salt } = await hashPassword(password);
+  updateAccountPassword(+req.params.id, hash, salt);
+  res.json({ ok: true });
+});
+
+app.post('/api/change-password', auth, async (req, res) => {
+  const { oldPassword, newPassword } = req.body;
+  if (!newPassword || newPassword.length < 4) return res.status(400).json({ error: 'password too short (min 4)' });
+  const account = getAccountByUsername(req.user.username);
+  const valid = await verifyPassword(oldPassword, account.password_hash, account.salt);
+  if (!valid) return res.status(401).json({ error: 'wrong current password' });
+  const { hash, salt } = await hashPassword(newPassword);
+  updateAccountPassword(account.id, hash, salt);
+  res.json({ ok: true });
+});
 
 // --- Cache refresh ---
 app.post('/api/refresh', auth, (req, res) => {
@@ -133,7 +198,14 @@ app.post('/api/refresh', auth, (req, res) => {
 });
 
 // --- Config ---
-app.get('/api/config', auth, (req, res) => res.json(getConfigForUI()));
+app.get('/api/config', auth, (req, res) => {
+  const cfg = getConfigForUI();
+  if (req.user.role !== 'admin') {
+    cfg.projects = (cfg.projects || []).filter(p => p.owner === req.user.username);
+    delete cfg.proxy; delete cfg.kookeey; delete cfg.localProxy; delete cfg.ai; delete cfg.facebook;
+  }
+  res.json(cfg);
+});
 app.put('/api/config', auth, (req, res) => {
   try { saveConfig(req.body); res.json({ ok: true, config: getConfigForUI() }); }
   catch (e) { res.status(400).json({ error: e.message }); }
