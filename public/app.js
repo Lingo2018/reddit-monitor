@@ -238,19 +238,23 @@ function toast(msg) {
 }
 
 // --- Router ---
-function route() {
+async function route() {
   // Handle report detail via hash
   const hash = location.hash.slice(1);
   if (hash.startsWith('report/')) { renderReportDetail(hash.slice(7)); return; }
 
-  if (currentPlatform === 'settings') { renderGlobalSettings(); return; }
-
-  if (currentTab === 'stats') renderStats();
-  else if (currentTab === 'data') renderData();
-  else if (currentTab === 'reports') renderReports();
-  else if (currentTab === 'users') renderUsers();
-  else if (currentTab === 'products') renderProducts();
-  else if (currentTab === 'config') renderPlatformConfig();
+  try {
+    if (currentPlatform === 'settings') { await renderGlobalSettings(); return; }
+    if (currentTab === 'stats') await renderStats();
+    else if (currentTab === 'data') await renderData();
+    else if (currentTab === 'reports') await renderReports();
+    else if (currentTab === 'users') await renderUsers();
+    else if (currentTab === 'products') await renderProducts();
+    else if (currentTab === 'config') await renderPlatformConfig();
+  } catch (e) {
+    console.error('route error:', e);
+    app.innerHTML = `<div class="section"><p style="color:var(--red)">页面加载失败: ${e.message}</p><p style="color:var(--text-muted);margin-top:8px">请尝试刷新页面或检查网络连接</p></div>`;
+  }
 }
 
 async function init() {
@@ -1042,7 +1046,8 @@ async function renderPlatformConfig() {
 // --- Facebook Config ---
 async function renderFacebookConfig() {
   app.innerHTML = skeleton(3);
-  const cfg = await apiCached('/config');
+  let cfg;
+  try { cfg = await apiCached('/config'); } catch { cfg = {}; }
   const fb = cfg.facebook || {};
 
   app.innerHTML = `
@@ -1130,7 +1135,8 @@ async function renderFacebookConfig() {
 // --- Global Settings (AI, proxy, password) ---
 async function renderGlobalSettings() {
   app.innerHTML = skeleton(3);
-  const cfg = await apiCached('/config');
+  let cfg;
+  try { cfg = await apiCached('/config'); } catch { cfg = {}; }
 
   app.innerHTML = `
     <div class="section">
