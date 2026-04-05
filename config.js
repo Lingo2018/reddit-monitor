@@ -47,6 +47,7 @@ export function loadConfig() {
     kookeey: cfg.kookeey || null,
     ai: cfg.ai || null,
     facebook: cfg.facebook || null,
+    fbPollIntervalHours: cfg.fbPollIntervalHours || 6,
   };
 }
 
@@ -64,7 +65,7 @@ export function getConfigForUI() {
 
 export function saveConfig(updates) {
   const cfg = readRaw();
-  const allowed = ['projects', 'pollIntervalMinutes', 'proxy', 'kookeey', 'webPassword', 'ai', 'localProxy', 'facebook'];
+  const allowed = ['projects', 'pollIntervalMinutes', 'fbPollIntervalHours', 'proxy', 'kookeey', 'webPassword', 'ai', 'localProxy', 'facebook'];
 
   for (const key of allowed) {
     if (updates[key] !== undefined) {

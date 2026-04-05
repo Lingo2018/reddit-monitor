@@ -6,6 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { loadConfig, saveConfig, getConfigForUI } from './config.js';
 import db, { getProducts, addProduct, updateProduct, deleteProduct } from './db.js';
+import * as fbBrowser from './facebook-browser.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const JWT_SECRET = crypto.randomBytes(32).toString('hex');
@@ -633,6 +634,200 @@ app.get('/api/users', auth, (req, res) => {
   return { rows, total, page: +page, pages: Math.ceil(total / lim) };
   });
   res.json(result);
+});
+
+// --- Facebook Browser Automation ---
+app.get('/api/fb-browser/status', auth, (req, res) => {
+  res.json({ ...fbBrowser.getBrowserStatus(), cookies: fbBrowser.getCookieStatus() });
+});
+
+app.post('/api/fb-browser/start', auth, async (req, res) => {
+  try {
+    const result = await fbBrowser.startBrowser();
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/fb-browser/stop', auth, async (req, res) => {
+  try {
+    const result = await fbBrowser.stopBrowser();
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/fb-browser/login', auth, async (req, res) => {
+  try {
+    const result = await fbBrowser.navigateToLogin();
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/fb-browser/navigate', auth, async (req, res) => {
+  const { url } = req.body;
+  if (!url) return res.status(400).json({ error: 'url required' });
+  try {
+    const result = await fbBrowser.navigateTo(url);
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/fb-browser/save-cookies', auth, async (req, res) => {
+  try {
+    const result = await fbBrowser.saveCurrentCookies();
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/fb-browser/screenshot', auth, (req, res) => {
+  const shot = fbBrowser.getLastScreenshot();
+  if (!shot) return res.status(404).end();
+  const buf = Buffer.from(shot, 'base64');
+  res.setHeader('Content-Type', 'image/jpeg');
+  res.setHeader('Cache-Control', 'no-cache, no-store');
+  res.end(buf);
+});
+
+app.post('/api/fb-browser/action', auth, async (req, res) => {
+  const pg = fbBrowser.getPage();
+  if (!pg) return res.status(400).json({ error: 'browser not running' });
+  const { action, x, y, text, key, deltaY } = req.body;
+  try {
+    if (action === 'click') await pg.mouse.click(x, y);
+    else if (action === 'dblclick') await pg.mouse.dblclick(x, y);
+    else if (action === 'type') await pg.keyboard.type(text, { delay: 80 + Math.random() * 80 });
+    else if (action === 'press') await pg.keyboard.press(key);
+    else if (action === 'scroll') await pg.mouse.wheel(0, deltaY || 300);
+    else return res.status(400).json({ error: 'unknown action' });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+let fbScrapeRunning = false;
+let fbScrapeLog = [];
+
+// Auto start browser if cookies exist, return true if ready
+async function ensureBrowser() {
+  if (fbBrowser.getBrowserStatus().running) return true;
+  const cookies = fbBrowser.getCookieStatus();
+  if (!cookies.loggedIn) return false;
+  await fbBrowser.startBrowser();
+  await new Promise(r => setTimeout(r, 2000));
+  return true;
+}
+
+app.post('/api/fb-browser/scrape-group', auth, async (req, res) => {
+  const { groupId, groupName, maxScrolls = 8 } = req.body;
+  if (!groupId) return res.status(400).json({ error: 'groupId required' });
+  if (fbScrapeRunning) return res.status(409).json({ error: 'scrape already running' });
+
+  fbScrapeRunning = true;
+  fbScrapeLog = [`[${new Date().toISOString()}] Starting scrape: ${groupName || groupId}`];
+  res.json({ ok: true, message: 'scrape started' });
+
+  let autoStarted = false;
+  try {
+    if (!fbBrowser.getBrowserStatus().running) {
+      fbScrapeLog.push('Auto-starting browser...');
+      autoStarted = true;
+      if (!(await ensureBrowser())) { fbScrapeLog.push('Error: not logged in, please login first'); fbScrapeRunning = false; return; }
+      fbScrapeLog.push('Browser ready');
+    }
+    const mentions = await fbBrowser.scrapeGroup(groupId, groupName || groupId, maxScrolls);
+    fbScrapeLog.push(`Extracted ${mentions.length} mentions`);
+    if (mentions.length) {
+      const { saveMentions } = await import('./db.js');
+      const cfg = loadConfig();
+      const project = cfg.projects.find(p => p.enabled !== false)?.id || 'default';
+      const withProject = mentions.map(m => ({ ...m, project }));
+      const newCount = saveMentions(withProject);
+      fbScrapeLog.push(`Saved: ${newCount} new / ${mentions.length} total`);
+    }
+  } catch (e) { fbScrapeLog.push(`Error: ${e.message}`); }
+  if (autoStarted) { await fbBrowser.stopBrowser().catch(() => {}); fbScrapeLog.push('Browser auto-closed'); }
+  fbScrapeRunning = false;
+});
+
+// Debug: inspect DOM structure
+app.get('/api/fb-browser/debug-dom', auth, async (req, res) => {
+  const pg = fbBrowser.getPage();
+  if (!pg) return res.status(400).json({ error: 'no page' });
+  try {
+    const stats = await pg.evaluate(() => {
+      // Dump first 3 feed items' full link hrefs and all text nodes
+      const feedItems = document.querySelectorAll('div[role="feed"] > div');
+      const results = [];
+      for (let i = 0; i < Math.min(3, feedItems.length); i++) {
+        const item = feedItems[i];
+        const allLinks = [...item.querySelectorAll('a')].map(a => ({
+          href: (a.getAttribute('href') || '').slice(0, 150),
+          text: a.innerText.trim().slice(0, 60),
+          hasStrong: !!a.querySelector('strong'),
+        })).filter(l => l.href && l.href !== '#');
+        const allStrongs = [...item.querySelectorAll('strong')].map(s => s.innerText.trim()).filter(Boolean);
+        const allDirAuto = [...item.querySelectorAll('div[dir="auto"]')].map(d => d.innerText.trim().slice(0, 100)).filter(t => t.length > 5);
+        const allSpans = [...item.querySelectorAll('span')].map(s => s.innerText.trim()).filter(t => /^\d+[hmdw]?$/.test(t) || /ago|hr|min|just now/i.test(t)).slice(0, 3);
+        results.push({ links: allLinks.slice(0, 10), strongs: allStrongs, dirAuto: allDirAuto.slice(0, 3), timeSpans: allSpans });
+      }
+      return { feedItems: feedItems.length, items: results };
+    });
+    res.json(stats);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/fb-browser/scrape-status', auth, (req, res) => {
+  res.json({ running: fbScrapeRunning, log: fbScrapeLog });
+});
+
+app.post('/api/fb-browser/scrape-all', auth, async (req, res) => {
+  if (fbScrapeRunning) return res.status(409).json({ error: 'scrape already running' });
+
+  const cfg = loadConfig();
+  const groups = [];
+  for (const project of cfg.projects) {
+    for (const g of project.facebookGroups || []) {
+      const gid = g.groupId || g;
+      const gname = g.name || gid;
+      groups.push({ groupId: gid, groupName: gname, project: project.id });
+    }
+  }
+  if (!groups.length) return res.status(400).json({ error: 'no Facebook groups configured' });
+
+  fbScrapeRunning = true;
+  fbScrapeLog = [`[${new Date().toISOString()}] Batch scrape: ${groups.length} groups`];
+  res.json({ ok: true, message: `scraping ${groups.length} groups` });
+
+  let autoStarted = false;
+  try {
+    if (!fbBrowser.getBrowserStatus().running) {
+      fbScrapeLog.push('Auto-starting browser...');
+      autoStarted = true;
+      if (!(await ensureBrowser())) { fbScrapeLog.push('Error: not logged in, please login first'); fbScrapeRunning = false; return; }
+      fbScrapeLog.push('Browser ready');
+    }
+
+    for (const g of groups) {
+      try {
+        fbScrapeLog.push(`Scraping: ${g.groupName}...`);
+        const mentions = await fbBrowser.scrapeGroup(g.groupId, g.groupName, 8);
+        fbScrapeLog.push(`  ${mentions.length} mentions from ${g.groupName}`);
+        if (mentions.length) {
+          const { saveMentions } = await import('./db.js');
+          const withProject = mentions.map(m => ({ ...m, project: g.project }));
+          const newCount = saveMentions(withProject);
+          fbScrapeLog.push(`  Saved: ${newCount} new`);
+        }
+        if (groups.indexOf(g) < groups.length - 1) {
+          const wait = 30000 + Math.random() * 30000;
+          fbScrapeLog.push(`  Waiting ${Math.round(wait / 1000)}s before next group...`);
+          await new Promise(r => setTimeout(r, wait));
+        }
+      } catch (e) { fbScrapeLog.push(`  Error on ${g.groupName}: ${e.message}`); }
+    }
+  } catch (e) { fbScrapeLog.push(`Error: ${e.message}`); }
+
+  if (autoStarted) { await fbBrowser.stopBrowser().catch(() => {}); fbScrapeLog.push('Browser auto-closed'); }
+  fbScrapeLog.push(`[${new Date().toISOString()}] Batch scrape complete`);
+  fbScrapeRunning = false;
 });
 
 // SPA fallback

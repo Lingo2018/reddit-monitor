@@ -38,7 +38,7 @@ const i18n = {
     pollSetting: '轮询设置', interval: '间隔（分钟）', webPwd: '登录密码',
     aiSetting: 'AI 分析设置', aiEndpoint: 'API 地址', aiKey: 'API Key', aiModel: '模型',
     projects: '监控项目', addProject: '+ 添加项目', deleteProject: '删除',
-    projectId: '项目ID', projectName: '项目名称', reportRole: '报告分析师角色', reportRoleHint: '例如：Unihertz公关策略师',
+    projectId: '项目ID', projectName: '项目名称', reportRole: '报告分析师角色', reportRoleHint: '例如：品牌公关策略师',
     regenerateReport: '重新生成',
     brandKw: '品牌关键词（每行一个）', industryKw: '行业关键词（每行一个）',
     competitorKw: '竞对关键词（每行一个）', subreddits: '监控 Subreddit（每行一个）',
@@ -100,7 +100,7 @@ const i18n = {
     pollSetting: 'Poll Settings', interval: 'Interval (minutes)', webPwd: 'Web Password',
     aiSetting: 'AI Analysis Settings', aiEndpoint: 'API Endpoint', aiKey: 'API Key', aiModel: 'Model',
     projects: 'Projects', addProject: '+ Add Project', deleteProject: 'Delete',
-    projectId: 'ID', projectName: 'Name', reportRole: 'Report Analyst Role', reportRoleHint: 'e.g. Unihertz PR Strategist',
+    projectId: 'ID', projectName: 'Name', reportRole: 'Report Analyst Role', reportRoleHint: 'e.g. Brand PR Strategist',
     regenerateReport: 'Regenerate',
     brandKw: 'Brand Keywords (one per line)', industryKw: 'Industry Keywords (one per line)',
     competitorKw: 'Competitor Keywords (one per line)', subreddits: 'Subreddits (one per line)',
@@ -314,11 +314,28 @@ function showLogin() {
     const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pwd }) });
     if (res.ok) {
       $('#login-container').style.display = 'none';
-      // show layout
       $('#layout').style.display = 'flex';
+      bindSidebarActions();
       await loadProjects();
-      apiCached('/stats').catch(()=>{});
       updateNav();
+
+      $('#project-selector').onchange = (e) => {
+        currentProject = e.target.value;
+        localStorage.setItem('rm-project', currentProject);
+        route();
+      };
+      document.querySelectorAll('.sidebar-item').forEach(item => {
+        item.onclick = () => {
+          currentPlatform = item.dataset.platform;
+          localStorage.setItem('rm-platform', currentPlatform);
+          if (currentPlatform === 'settings') currentTab = 'config';
+          else if (currentTab === 'config' && currentPlatform !== 'settings') currentTab = 'stats';
+          updateSidebar();
+          updateTabs();
+          route();
+        };
+      });
+
       currentTab = 'stats'; route();
     }
     else $('#login-err').textContent = t('wrongPwd');
@@ -407,14 +424,14 @@ async function renderStats() {
     </div>
 
     <div class="section">
-      <h3>${t('topSubs')}</h3>
+      <h3>${currentPlatform === 'facebook' ? '热门 Post' : t('topSubs')}</h3>
       <table>
-        <thead><tr><th>Subreddit</th><th>${t('mentions')}</th></tr></thead>
-        <tbody>${d.topSubs.map(s => `<tr><td>r/${s.subreddit}</td><td>${s.count}</td></tr>`).join('')}</tbody>
+        <thead><tr><th>${currentPlatform === 'facebook' ? 'Group' : 'Subreddit'}</th><th>${t('mentions')}</th></tr></thead>
+        <tbody>${d.topSubs.map(s => `<tr><td>${currentPlatform === 'facebook' ? esc(s.subreddit) : 'r/' + s.subreddit}</td><td>${s.count}</td></tr>`).join('')}</tbody>
       </table>
     </div>
 
-    <div class="section">
+    ${currentPlatform !== 'facebook' ? `<div class="section">
       <h3>${t('recentPolls')}</h3>
       <table>
         <thead><tr><th>${t('time')}</th><th>${t('type')}</th><th>${t('newItems')}</th><th>${t('duration')}</th><th>${t('errors')}</th></tr></thead>
@@ -426,7 +443,7 @@ async function renderStats() {
           <td class="truncate">${p.errors || '-'}</td>
         </tr>`).join('')}</tbody>
       </table>
-    </div>`;
+    </div>` : ''}`;
 
   const chart = $('#chart');
   d.byDay.forEach(r => {
@@ -477,17 +494,22 @@ async function renderData() {
       </div>
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">${t('totalResults').replace('{n}', d.total)}</div>
       <table>
-        <thead><tr><th>${t('time')}</th><th style="min-width:50px">${t('type')}</th><th style="min-width:60px">${t('sentiment')}</th><th>${t('author')}</th><th>Karma</th><th>${t('title_col')}</th><th>${t('aiSummary')}</th><th>${t('score')}</th></tr></thead>
-        <tbody>${d.rows.map((r, i) => `<tr data-id="${r.id}" data-idx="${i}" class="data-row">
+        <thead><tr><th>${t('time')}</th><th style="min-width:50px">${t('type')}</th><th style="min-width:60px">${t('sentiment')}</th><th>${t('author')}</th>${currentPlatform !== 'facebook' ? '<th>Karma</th>' : ''}<th>${t('title_col')}</th><th>${t('aiSummary')}</th><th>${t('score')}</th></tr></thead>
+        <tbody>${d.rows.map((r, i) => {
+          const isFb = r.id?.startsWith('fb_') || currentPlatform === 'facebook';
+          const authorHtml = isFb ? esc(r.author) : `<a class="reddit-link" href="https://reddit.com/u/${r.author}" target="_blank">u/${r.author}</a>`;
+          const linkHref = isFb ? (r.permalink || '#') : ('https://reddit.com' + r.permalink);
+          const titleText = esc(r.type === 'comment' ? (r.body?.slice(0, 100) || r.title || '-') : (r.title || r.body?.slice(0, 100) || '-'));
+          return `<tr data-id="${r.id}" data-idx="${i}" class="data-row">
           <td style="white-space:nowrap">${fmtUtc(r.created_utc)}</td>
           <td style="white-space:nowrap">${r.type === 'post' ? t('post') : t('comment')}</td>
           <td style="white-space:nowrap">${sentimentBadge(r.sentiment)}</td>
-          <td style="white-space:nowrap"><a class="reddit-link" href="https://reddit.com/u/${r.author}" target="_blank">u/${r.author}</a></td>
-          <td style="color:var(--text-muted);font-size:12px;white-space:nowrap">${r.total_karma != null ? fmtKarma(r.total_karma) : '-'}</td>
-          <td class="truncate"><a class="reddit-link" href="https://reddit.com${r.permalink}" target="_blank">${esc(r.type === 'comment' ? (r.body?.slice(0, 100) || r.title || '-') : (r.title || '-'))}</a></td>
+          <td style="white-space:nowrap">${authorHtml}</td>
+          ${!isFb ? `<td style="color:var(--text-muted);font-size:12px;white-space:nowrap">${r.total_karma != null ? fmtKarma(r.total_karma) : '-'}</td>` : ''}
+          <td class="truncate"><a class="reddit-link" href="${linkHref}" target="_blank">${titleText}</a></td>
           <td class="ai-cell" data-idx="${i}"><span class="ai-text">${esc(r.ai_summary || '-')}</span></td>
           <td>${r.score}</td>
-        </tr>`).join('')}</tbody>
+        </tr>`}).join('')}</tbody>
       </table>
       <div class="pagination">
         <button class="btn btn-outline btn-sm" id="prev-page" ${d.page <= 1 ? 'disabled' : ''}>${t('prevPage')}</button>
@@ -631,12 +653,16 @@ async function renderReportDetail(dateAndParams) {
     ${(r.negativeItems || []).length ? `<div class="section"><h3>${t('negativeActions')}</h3>
       <table>
         <thead><tr><th style="width:50px">${t('type')}</th><th style="width:100px">${t('author')}</th><th>${t('aiSummary')}</th><th style="width:70px"></th></tr></thead>
-        <tbody>${r.negativeItems.map(n => `<tr>
+        <tbody>${r.negativeItems.map(n => {
+          const nFb = n.permalink?.startsWith('http');
+          const authorHtml = nFb ? esc(n.author) : `<a class="reddit-link" href="https://reddit.com/u/${n.author}" target="_blank">u/${n.author}</a>`;
+          const linkHref = nFb ? n.permalink : ('https://reddit.com' + n.permalink);
+          return `<tr>
           <td style="white-space:nowrap">${n.type === 'post' ? t('post') : t('comment')}</td>
-          <td style="white-space:nowrap"><a class="reddit-link" href="https://reddit.com/u/${n.author}" target="_blank">u/${n.author}</a></td>
+          <td style="white-space:nowrap">${authorHtml}</td>
           <td style="color:var(--text-light)">${esc(n.summary || '-')}</td>
-          <td style="white-space:nowrap"><a class="btn btn-sm btn-outline" href="https://reddit.com${n.permalink}" target="_blank" style="white-space:nowrap">${t('goReply')}</a></td>
-        </tr>`).join('')}</tbody>
+          <td style="white-space:nowrap"><a class="btn btn-sm btn-outline" href="${linkHref}" target="_blank" style="white-space:nowrap">${t('goReply')}</a></td>
+        </tr>`}).join('')}</tbody>
       </table>
     </div>` : ''}
     <div class="section">
@@ -702,7 +728,7 @@ async function renderUsers() {
     <div class="section">
       <div class="filters">
         <select id="u-sort">
-          <option value="karma" ${userState.sort === 'karma' ? 'selected' : ''}>${t('sortKarma')}</option>
+          ${currentPlatform !== 'facebook' ? `<option value="karma" ${userState.sort === 'karma' ? 'selected' : ''}>${t('sortKarma')}</option>` : ''}
           <option value="activity" ${userState.sort === 'activity' ? 'selected' : ''}>${t('sortActivity')}</option>
           <option value="posts" ${userState.sort === 'posts' ? 'selected' : ''}>${t('sortPosts')}</option>
           <option value="comments" ${userState.sort === 'comments' ? 'selected' : ''}>${t('sortComments')}</option>
@@ -717,29 +743,27 @@ async function renderUsers() {
         <thead><tr>
           <th>#</th>
           <th>${t('author')}</th>
-          <th>Karma</th>
+          ${currentPlatform !== 'facebook' ? '<th>Karma</th>' : ''}
           <th>${t('totalActivity')}</th>
           <th>${t('posts')}</th>
           <th>${t('comments')}</th>
-          <th>${t('avgScore')}</th>
           <th>${t('positive')}/${t('negative')}</th>
           <th>${t('lastSeen')}</th>
-          <th>${t('accountAge')}</th>
+          ${currentPlatform !== 'facebook' ? `<th>${t('accountAge')}</th>` : ''}
         </tr></thead>
         <tbody>${d.rows.map((r, i) => {
           const rank = (d.page - 1) * 50 + i + 1;
-          const age = r.account_created_utc ? fmtAge(r.account_created_utc) : '-';
+          const isFb = currentPlatform === 'facebook';
           return `<tr>
             <td style="color:var(--text-muted)">${rank}</td>
-            <td><a class="reddit-link" href="https://reddit.com/u/${r.author}" target="_blank">u/${r.author}</a></td>
-            <td style="font-weight:700;color:var(--primary)">${r.total_karma != null ? fmtKarma(r.total_karma) : '-'}</td>
+            <td>${isFb ? esc(r.author) : `<a class="reddit-link" href="https://reddit.com/u/${r.author}" target="_blank">u/${r.author}</a>`}</td>
+            ${!isFb ? `<td style="font-weight:700;color:var(--primary)">${r.total_karma != null ? fmtKarma(r.total_karma) : '-'}</td>` : ''}
             <td style="font-weight:600">${r.total_count}</td>
             <td>${r.post_count}</td>
             <td>${r.comment_count}</td>
-            <td>${r.avg_score ?? '-'}</td>
             <td><span style="color:var(--green)">${r.positive_count || 0}</span> / <span style="color:var(--red)">${r.negative_count || 0}</span></td>
             <td>${fmtUtc(r.last_seen)}</td>
-            <td style="color:var(--text-muted);font-size:12px">${age}</td>
+            ${!isFb ? `<td style="color:var(--text-muted);font-size:12px">${r.account_created_utc ? fmtAge(r.account_created_utc) : '-'}</td>` : ''}
           </tr>`;
         }).join('')}</tbody>
       </table>
@@ -1044,30 +1068,61 @@ async function renderPlatformConfig() {
 }
 
 // --- Facebook Config ---
+let fbScreenshotTimer = null;
+
 async function renderFacebookConfig() {
   app.innerHTML = skeleton(3);
   let cfg;
   try { cfg = await apiCached('/config'); } catch { cfg = {}; }
   const fb = cfg.facebook || {};
 
+  let browserStatus = {};
+  try { browserStatus = await api('/fb-browser/status').then(r => r.json()); } catch {}
+
+  const browserRunning = browserStatus.running;
+  const cookieLoggedIn = browserStatus.cookies?.loggedIn;
+
   app.innerHTML = `
     <div class="section">
-      <h3>${t('fbSetting')}</h3>
-      <div class="form-row">
-        <div class="form-group"><label>${t('fbAppId')}</label><input id="c-fb-appid" value="${fb.appId || ''}" autocomplete="off"></div>
-        <div class="form-group"><label>${t('fbAppSecret')}</label><input id="c-fb-secret" type="password" value="" autocomplete="new-password" placeholder="${t('unchangedHint')}"></div>
+      <h3>Facebook 浏览器自动化</h3>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Stealth 浏览器抓取 Facebook Group 数据（反检测模式）</p>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+        <button class="btn ${browserRunning ? 'btn-outline' : 'btn-primary'} btn-sm" id="fb-browser-start" ${browserRunning ? 'disabled' : ''}>
+          ${browserRunning ? '浏览器运行中' : '启动浏览器'}
+        </button>
+        <button class="btn btn-outline btn-sm" id="fb-browser-save-cookies" ${!browserRunning ? 'disabled' : ''}>保存 Cookies 并关闭</button>
+        <span id="fb-browser-status" style="font-size:12px;color:var(--text-muted)">
+          Cookie: ${cookieLoggedIn ? '<span style="color:var(--green)">已登录</span>' : '<span style="color:var(--orange)">未登录</span>'}
+          (${browserStatus.cookies?.count || 0} cookies)
+        </span>
       </div>
-      <div class="form-group"><label>${t('fbToken')}</label><input id="c-fb-token" type="password" value="" autocomplete="new-password" placeholder="${t('unchangedHint')}"></div>
-      <div style="margin-top:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <button class="btn btn-outline btn-sm" id="test-fb-token">${t('testToken')}</button>
-        <button class="btn btn-outline btn-sm" id="exchange-fb-token">${t('exchangeToken')}</button>
-        <span id="fb-token-result" style="font-size:13px"></span>
+      <div id="fb-browser-view" style="display:${browserRunning ? 'block' : 'none'};margin-bottom:16px">
+        <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#000;cursor:crosshair;max-width:600px" id="fb-screen-container">
+          <img id="fb-screenshot" style="width:100%;display:block" alt="Browser view">
+        </div>
+        <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input type="text" id="fb-type-input" placeholder="先点击截图中的输入框，再在这里输入文字回车发送" style="flex:1;min-width:250px;padding:8px 12px;font-size:14px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:6px;color:var(--text)" autocomplete="off">
+          <button class="btn btn-outline btn-sm" id="fb-send-enter" title="发送回车键">Enter</button>
+          <button class="btn btn-outline btn-sm" id="fb-send-tab" title="发送Tab键">Tab</button>
+          <button class="btn btn-outline btn-sm" id="fb-scroll-up" title="向上滚动">&#9650;</button>
+          <button class="btn btn-outline btn-sm" id="fb-scroll-down" title="向下滚动">&#9660;</button>
+        </div>
+        <div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input type="text" id="fb-nav-url" placeholder="输入 URL 导航..." style="flex:1;min-width:200px;padding:6px 10px;font-size:13px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;color:var(--text)" autocomplete="off">
+          <button class="btn btn-outline btn-sm" id="fb-nav-go">导航</button>
+        </div>
       </div>
     </div>
 
     <div class="section">
-      <h3>${t('projects')}</h3>
+      <h3>${t('projects')} — Facebook</h3>
       <div id="fb-projects-list"></div>
+      <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-outline" id="fb-add-project">${t('addProject')}</button>
+        <button class="btn btn-primary btn-sm" id="fb-scrape-all">立即抓取全部 Group</button>
+        <span id="fb-scrape-status" style="font-size:12px;color:var(--text-muted)"></span>
+      </div>
+      <pre id="fb-scrape-log" style="font-size:11px;color:var(--text-muted);background:rgba(0,0,0,0.2);padding:10px;border-radius:6px;max-height:200px;overflow-y:auto;white-space:pre-wrap;display:none;margin-top:10px"></pre>
     </div>
 
     <div style="margin-top:16px">
@@ -1077,33 +1132,61 @@ async function renderFacebookConfig() {
       <button class="btn btn-primary" id="save-fb-config-float">${t('saveConfig')}</button>
     </div>`;
 
-  // Render project facebook groups
-  const projectsList = $('#fb-projects-list');
-  projectsList.innerHTML = (cfg.projects || []).map((p, i) => `
-    <div class="project-card" data-idx="${i}">
-      <div class="project-header"><h4>${esc(p.name || p.id)}</h4></div>
-      <div class="form-group"><label>${t('fbGroups')}</label><textarea class="fb-groups" rows="3">${(p.facebookGroups || []).map(g => typeof g === 'string' ? g : g.groupId + ':' + (g.name || '')).join('\n')}</textarea></div>
-    </div>`).join('');
+  // Render Facebook projects (same structure as Reddit)
+  const fbProjectsList = $('#fb-projects-list');
+  const fbProjects = JSON.parse(JSON.stringify(cfg.projects || []));
+
+  function renderFbProjects() {
+    fbProjectsList.innerHTML = fbProjects.map((p, i) => `
+      <div class="project-card" data-idx="${i}">
+        <div class="project-header">
+          <h4>${esc(p.name || p.id || 'Project ' + (i + 1))}</h4>
+          <div class="btn-group">
+            <label style="font-size:12px"><input type="checkbox" class="fp-enabled" ${p.enabled !== false ? 'checked' : ''}> ${t('enabled')}</label>
+            <button class="btn btn-outline btn-sm fp-del">${t('deleteProject')}</button>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>${t('projectId')}</label><input class="fp-id" value="${esc(p.id || '')}" autocomplete="off"></div>
+          <div class="form-group"><label>${t('projectName')}</label><input class="fp-name" value="${esc(p.name || '')}" autocomplete="off"></div>
+        </div>
+        <div class="form-group"><label>${t('reportRole')}</label><textarea class="fp-role" rows="2" placeholder="${t('reportRoleHint')}">${esc(p.reportRole || '')}</textarea></div>
+        <div class="form-group"><label>${t('fbGroups')}</label><textarea class="fp-groups" rows="3" placeholder="groupId:名称，每行一个">${(p.facebookGroups || []).map(g => typeof g === 'string' ? g : g.groupId + ':' + (g.name || '')).join('\n')}</textarea></div>
+      </div>`).join('');
+
+    document.querySelectorAll('.fp-del').forEach(btn => {
+      btn.onclick = () => {
+        fbProjects.splice(+btn.closest('.project-card').dataset.idx, 1);
+        renderFbProjects();
+      };
+    });
+  }
+  renderFbProjects();
+
+  $('#fb-add-project').onclick = () => {
+    fbProjects.push({ id: '', name: '', enabled: true, facebookGroups: [] });
+    renderFbProjects();
+  };
 
   const doSaveFb = async () => {
-    const update = {
-      facebook: { appId: $('#c-fb-appid').value.trim() },
-      projects: (cfg.projects || []).map((p, i) => {
-        const textarea = document.querySelectorAll('.fb-groups')[i];
-        const groups = (textarea?.value || '').split('\n').map(l => l.trim()).filter(Boolean).map(l => {
-          const [gid, ...rest] = l.split(':');
-          return { groupId: gid.trim(), name: rest.join(':').trim() || gid.trim() };
-        });
-        return { ...p, facebookGroups: groups };
-      }),
-    };
-    const secret = $('#c-fb-secret').value;
-    if (secret) update.facebook.appSecret = secret;
-    const token = $('#c-fb-token').value;
-    if (token) update.facebook.accessToken = token;
-
+    const lines = v => v.split('\n').map(s => s.trim()).filter(Boolean);
+    const cards = document.querySelectorAll('.project-card');
+    const updatedProjects = [...cards].map((c, i) => {
+      const groups = lines(c.querySelector('.fp-groups').value).map(l => {
+        const [gid, ...rest] = l.split(':');
+        return { groupId: gid.trim(), name: rest.join(':').trim() || gid.trim() };
+      });
+      return {
+        ...(fbProjects[i] || {}),
+        id: c.querySelector('.fp-id').value.trim(),
+        name: c.querySelector('.fp-name').value.trim(),
+        reportRole: c.querySelector('.fp-role').value.trim(),
+        enabled: c.querySelector('.fp-enabled').checked,
+        facebookGroups: groups,
+      };
+    });
     try {
-      await api('/config', { method: 'PUT', body: update });
+      await api('/config', { method: 'PUT', body: { projects: updatedProjects } });
       clearClientCache();
       toast(t('configSaved'));
     } catch (e) { toast(t('saveFailed') + e.message); }
@@ -1111,25 +1194,88 @@ async function renderFacebookConfig() {
   $('#save-fb-config').onclick = doSaveFb;
   $('#save-fb-config-float').onclick = doSaveFb;
 
-  $('#test-fb-token').onclick = async () => {
-    const result = $('#fb-token-result');
-    result.textContent = '...';
+  // --- Browser automation handlers ---
+  if (fbScreenshotTimer) { clearInterval(fbScreenshotTimer); fbScreenshotTimer = null; }
+
+  $('#fb-browser-start').onclick = async () => {
+    const btn = $('#fb-browser-start');
+    btn.disabled = true; btn.textContent = '启动中...';
     try {
-      const res = await api('/facebook/status');
+      const res = await api('/fb-browser/start', { method: 'POST' });
       const d = await res.json();
-      if (d.valid) { result.textContent = t('tokenValid') + ` (${d.name})`; result.style.color = 'var(--green)'; }
-      else { result.textContent = t('tokenInvalid') + ': ' + (d.error || ''); result.style.color = 'var(--red)'; }
-    } catch (e) { result.textContent = e.message; result.style.color = 'var(--red)'; }
+      if (d.ok || d.error) { clearClientCache(); renderFacebookConfig(); }
+    } catch (e) { toast(e.message); btn.disabled = false; btn.textContent = '启动浏览器'; }
   };
 
-  $('#exchange-fb-token').onclick = async () => {
+  $('#fb-browser-save-cookies').onclick = async () => {
     try {
-      const res = await api('/facebook/exchange-token', { method: 'POST' });
+      const res = await api('/fb-browser/save-cookies', { method: 'POST' });
       const d = await res.json();
-      if (d.ok) { toast(t('exchangeOk')); clearClientCache(); }
-      else { toast(d.error || 'failed'); }
+      toast(d.loggedIn ? `Cookies 已保存，已登录` : `Cookies 已保存，未检测到登录状态`);
+      // Auto stop browser after saving
+      await api('/fb-browser/stop', { method: 'POST' }).catch(() => {});
+      if (fbScreenshotTimer) { clearInterval(fbScreenshotTimer); fbScreenshotTimer = null; }
+      clearClientCache(); renderFacebookConfig();
     } catch (e) { toast(e.message); }
   };
+
+  // Screenshot streaming
+  if (browserRunning) {
+    const img = $('#fb-screenshot');
+    const refreshShot = () => { img.src = '/api/fb-browser/screenshot?t=' + Date.now(); };
+    refreshShot();
+    fbScreenshotTimer = setInterval(refreshShot, 1500);
+
+    const container = $('#fb-screen-container');
+    container.onclick = async (e) => {
+      if (e.target.id === 'fb-type-input' || e.target.tagName === 'BUTTON') return;
+      const rect = img.getBoundingClientRect();
+      const x = Math.round((e.clientX - rect.left) * 800 / rect.width);
+      const y = Math.round((e.clientY - rect.top) * 500 / rect.height);
+      await api('/fb-browser/action', { method: 'POST', body: { action: 'click', x, y } }).catch(() => {});
+    };
+
+    const fbAction = (body) => api('/fb-browser/action', { method: 'POST', body }).catch(() => {});
+    const typeInput = $('#fb-type-input');
+    typeInput.onkeydown = async (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (typeInput.value) {
+          await fbAction({ action: 'type', text: typeInput.value });
+          typeInput.value = '';
+        } else {
+          await fbAction({ action: 'press', key: 'Enter' });
+        }
+      } else if (e.key === 'Escape') {
+        await fbAction({ action: 'press', key: 'Escape' });
+      }
+    };
+
+    $('#fb-send-enter').onclick = () => fbAction({ action: 'press', key: 'Enter' });
+    $('#fb-send-tab').onclick = () => fbAction({ action: 'press', key: 'Tab' });
+    $('#fb-scroll-up').onclick = (e) => { e.stopPropagation(); fbAction({ action: 'scroll', deltaY: -500 }); };
+    $('#fb-scroll-down').onclick = (e) => { e.stopPropagation(); fbAction({ action: 'scroll', deltaY: 500 }); };
+  }
+
+  $('#fb-nav-go').onclick = async () => { const url = $('#fb-nav-url').value.trim(); if (url) await api('/fb-browser/navigate', { method: 'POST', body: { url } }).catch(e => toast(e.message)); };
+  $('#fb-nav-url').onkeydown = (e) => { if (e.key === 'Enter') $('#fb-nav-go').click(); };
+
+  // Scrape handlers
+  const updateScrapeLog = async () => {
+    try {
+      const res = await api('/fb-browser/scrape-status'); const d = await res.json();
+      const logEl = $('#fb-scrape-log'); const statusEl = $('#fb-scrape-status');
+      if (d.log?.length) { logEl.style.display = 'block'; logEl.textContent = d.log.join('\n'); logEl.scrollTop = logEl.scrollHeight; }
+      if (d.running) { statusEl.innerHTML = '<span style="color:var(--orange)">抓取中...</span>'; return true; }
+      else { statusEl.textContent = d.log?.length ? '抓取完成' : ''; return false; }
+    } catch { return false; }
+  };
+  const pollScrapeStatus = () => { const timer = setInterval(async () => { if (!(await updateScrapeLog())) clearInterval(timer); }, 2000); };
+
+  $('#fb-scrape-all').onclick = async () => {
+    try { const res = await api('/fb-browser/scrape-all', { method: 'POST' }); const d = await res.json(); if (d.ok) { toast(d.message); pollScrapeStatus(); } else toast(d.error || 'failed'); } catch (e) { toast(e.message); }
+  };
+  updateScrapeLog();
 }
 
 // --- Global Settings (AI, proxy, password) ---
@@ -1163,7 +1309,10 @@ async function renderGlobalSettings() {
 
     <div class="section">
       <h3>${t('pollSetting')}</h3>
-      <div class="form-group"><label>${t('interval')}</label><input id="c-interval" type="number" value="${cfg.pollIntervalMinutes || 8}" style="width:120px" autocomplete="off"></div>
+      <div class="form-row">
+        <div class="form-group"><label>Reddit 轮询间隔（分钟）</label><input id="c-interval" type="number" value="${cfg.pollIntervalMinutes || 8}" style="width:120px" autocomplete="off"></div>
+        <div class="form-group"><label>Facebook 抓取间隔（小时）</label><input id="c-fb-interval" type="number" value="${cfg.fbPollIntervalHours || 6}" style="width:120px" autocomplete="off"></div>
+      </div>
       <div class="form-group"><label>${t('webPwd')}</label><input id="c-webpwd" type="password" value="" autocomplete="new-password" placeholder="${t('unchangedHint')}"></div>
     </div>
 
@@ -1177,6 +1326,7 @@ async function renderGlobalSettings() {
   const doSaveGlobal = async () => {
     const update = {
       pollIntervalMinutes: +$('#c-interval').value || 8,
+      fbPollIntervalHours: +$('#c-fb-interval').value || 6,
       localProxy: { enabled: $('#c-lp-enabled').value === 'true', host: $('#c-lp-host').value.trim() || '127.0.0.1', port: +$('#c-lp-port').value || 10808 },
       ai: { endpoint: $('#c-ai-endpoint').value.trim(), model: $('#c-ai-model').value.trim() },
     };

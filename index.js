@@ -1,12 +1,14 @@
 import { loadConfig } from './config.js';
 import { createFetcher, createKookeeyFetcher } from './fetcher.js';
 import { createFacebookFetcher } from './facebook-fetcher.js';
+import * as fbBrowser from './facebook-browser.js';
 import db from './db.js';
 import { saveMentions, logPoll, logCommentRate, getUnanalyzedMentions, saveAnalysisBatch, getDailyAnalysisStats, saveDailyReport, getStaleUsers, saveUsers, getProductsForPrompt } from './db.js';
 import { analyzeBatch, generateDailyReport } from './analyzer.js';
 import app from './server.js';
 
 let roundCount = 0;
+let lastFbScrapeTime = 0;
 let lastReportDate = '';
 
 function log(msg) {
@@ -96,6 +98,61 @@ async function runFacebookProject(project, fbFetcher) {
   const newCount = saveMentions(allMentions);
   log(`  [${pid}] FB 完成: ${newCount} 新 / ${allMentions.length} 总`);
   return { tasks, errors, newCount, totalItems: allMentions.length };
+}
+
+// Browser-based Facebook Group scraping (stealth Playwright)
+async function runFacebookBrowserProject(project) {
+  const pid = project.id;
+  const tasks = [];
+  const errors = [];
+  let totalNew = 0;
+
+  const status = fbBrowser.getBrowserStatus();
+  if (!status.running) {
+    log(`  [${pid}] FB 浏览器未运行，尝试自动启动...`);
+    const cookies = fbBrowser.getCookieStatus();
+    if (!cookies.loggedIn) {
+      log(`  [${pid}] FB 浏览器未登录，跳过（请先在 Web UI 登录）`);
+      return { tasks, errors: ['fb-browser: not logged in'], newCount: 0, totalItems: 0 };
+    }
+    try {
+      await fbBrowser.startBrowser();
+      await new Promise(r => setTimeout(r, 3000));
+    } catch (e) {
+      errors.push(`fb-browser-start: ${e.message}`);
+      return { tasks, errors, newCount: 0, totalItems: 0 };
+    }
+  }
+
+  for (const group of project.facebookGroups || []) {
+    const groupId = group.groupId || group;
+    const groupName = group.name || groupId;
+    try {
+      log(`  [${pid}] FB Browser Group: ${groupName}`);
+      const mentions = await fbBrowser.scrapeGroup(groupId, groupName, 6);
+      tasks.push(`fb_browser:${groupName}`);
+
+      if (mentions.length) {
+        const withProject = mentions.map(m => ({ ...m, project: pid }));
+        const newCount = saveMentions(withProject);
+        totalNew += newCount;
+        log(`    浏览器抓取: ${newCount} 新 / ${mentions.length} 总`);
+      } else {
+        errors.push(`fb_browser:${groupName}: no data`);
+      }
+
+      // Wait between groups (anti-detection)
+      const wait = 30000 + Math.random() * 30000;
+      log(`    等待 ${Math.round(wait / 1000)}s...`);
+      await new Promise(r => setTimeout(r, wait));
+    } catch (err) {
+      errors.push(`fb_browser:${groupName}: ${err.message}`);
+      log(`    浏览器抓取失败: ${err.message}`);
+    }
+  }
+
+  log(`  [${pid}] FB 浏览器完成: ${totalNew} 新`);
+  return { tasks, errors, newCount: totalNew, totalItems: totalNew };
 }
 
 async function runAnalysis(config) {
@@ -192,14 +249,31 @@ async function runPoll() {
       allErrors.push(...result.errors);
     }
 
-    // Facebook
-    if (fbFetcher && project.facebookGroups?.length) {
-      try {
-        const fbResult = await runFacebookProject(project, fbFetcher);
-        totalNew += fbResult.newCount;
-        allTasks.push(...fbResult.tasks);
-        allErrors.push(...fbResult.errors);
-      } catch (e) { log(`  [${project.id}] Facebook 出错: ${e.message}`); }
+    // Facebook: prefer API, fallback to browser automation
+    if (project.facebookGroups?.length) {
+      if (fbFetcher) {
+        try {
+          const fbResult = await runFacebookProject(project, fbFetcher);
+          totalNew += fbResult.newCount;
+          allTasks.push(...fbResult.tasks);
+          allErrors.push(...fbResult.errors);
+        } catch (e) { log(`  [${project.id}] Facebook API 出错: ${e.message}`); }
+      } else {
+        // Browser-based: respect fbPollIntervalHours
+        const fbInterval = (config.fbPollIntervalHours || 6) * 3600000;
+        if (Date.now() - lastFbScrapeTime >= fbInterval) {
+          try {
+            const fbResult = await runFacebookBrowserProject(project);
+            totalNew += fbResult.newCount;
+            allTasks.push(...fbResult.tasks);
+            allErrors.push(...fbResult.errors);
+            lastFbScrapeTime = Date.now();
+          } catch (e) { log(`  [${project.id}] Facebook 浏览器出错: ${e.message}`); }
+        } else {
+          const nextIn = Math.round((fbInterval - (Date.now() - lastFbScrapeTime)) / 60000);
+          log(`  [${project.id}] FB 浏览器抓取跳过，${nextIn}分钟后执行`);
+        }
+      }
     }
   }
 
