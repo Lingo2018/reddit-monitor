@@ -181,7 +181,11 @@ function updateProjectSelector() {
 async function loadProjects() {
   try {
     const cfg = await apiCached('/config');
-    projectList = (cfg.projects || []).filter(p => p.id);
+    if (currentPlatform === 'facebook') {
+      projectList = (cfg.facebookProjects || []).filter(p => p.id);
+    } else {
+      projectList = (cfg.projects || []).filter(p => p.id);
+    }
     updateProjectSelector();
   } catch (e) { console.warn('loadProjects failed:', e); }
 }
@@ -281,6 +285,8 @@ async function init() {
           localStorage.setItem('rm-platform', currentPlatform);
           if (currentPlatform === 'settings') currentTab = 'config';
           else if (currentTab === 'config' && currentPlatform !== 'settings') currentTab = 'stats';
+          currentProject = ''; localStorage.setItem('rm-project', '');
+          loadProjects();
           updateSidebar();
           updateTabs();
           route();
@@ -330,6 +336,8 @@ function showLogin() {
           localStorage.setItem('rm-platform', currentPlatform);
           if (currentPlatform === 'settings') currentTab = 'config';
           else if (currentTab === 'config' && currentPlatform !== 'settings') currentTab = 'stats';
+          currentProject = ''; localStorage.setItem('rm-project', '');
+          loadProjects();
           updateSidebar();
           updateTabs();
           route();
@@ -1144,7 +1152,7 @@ async function renderFacebookConfig() {
 
   // Render Facebook projects (same structure as Reddit)
   const fbProjectsList = $('#fb-projects-list');
-  const fbProjects = JSON.parse(JSON.stringify(cfg.projects || []));
+  const fbProjects = JSON.parse(JSON.stringify(cfg.facebookProjects || []));
 
   function renderFbProjects() {
     fbProjectsList.innerHTML = fbProjects.map((p, i) => `
@@ -1196,7 +1204,7 @@ async function renderFacebookConfig() {
       };
     });
     try {
-      await api('/config', { method: 'PUT', body: { projects: updatedProjects } });
+      await api('/config', { method: 'PUT', body: { facebookProjects: updatedProjects } });
       clearClientCache();
       toast(t('configSaved'));
     } catch (e) { toast(t('saveFailed') + e.message); }

@@ -17,6 +17,7 @@ export function loadConfig() {
   const cfg = readRaw();
 
   const projects = (cfg.projects || []).filter(pr => pr.enabled !== false);
+  const facebookProjects = (cfg.facebookProjects || []).filter(pr => pr.enabled !== false);
   const p = cfg.proxy || {};
 
   // Evomi residential proxy (sticky session, 15min same IP)
@@ -33,6 +34,7 @@ export function loadConfig() {
 
   return {
     projects,
+    facebookProjects,
     pollIntervalMinutes: cfg.pollIntervalMinutes || 8,
     webPort: cfg.webPort || 3000,
     webPassword: cfg.webPassword || 'admin',
@@ -65,7 +67,7 @@ export function getConfigForUI() {
 
 export function saveConfig(updates) {
   const cfg = readRaw();
-  const allowed = ['projects', 'pollIntervalMinutes', 'fbPollIntervalHours', 'proxy', 'kookeey', 'webPassword', 'ai', 'localProxy', 'facebook'];
+  const allowed = ['projects', 'facebookProjects', 'pollIntervalMinutes', 'fbPollIntervalHours', 'proxy', 'kookeey', 'webPassword', 'ai', 'localProxy', 'facebook'];
 
   for (const key of allowed) {
     if (updates[key] !== undefined) {

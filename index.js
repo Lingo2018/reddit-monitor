@@ -158,7 +158,7 @@ async function runFacebookBrowserProject(project) {
 async function runAnalysis(config) {
   if (!config.ai?.apiKey || !config.ai?.endpoint) return;
 
-  for (const project of config.projects) {
+  for (const project of [...config.projects, ...config.facebookProjects]) {
     // Loop through all unanalyzed in batches of 15
     let totalAnalyzed = 0;
     while (true) {
@@ -192,7 +192,7 @@ async function checkDailyReport(config) {
 
   if (lastReportDate === yesterday) return;
 
-  for (const project of config.projects) {
+  for (const project of [...config.projects, ...config.facebookProjects]) {
     const stats = getDailyAnalysisStats(project.id, yesterday);
     if (stats.total === 0) { log(`  [${project.id}] ${yesterday} 无数据，跳过报告`); continue; }
 
@@ -222,58 +222,47 @@ async function checkDailyReport(config) {
 
 async function runPoll() {
   const config = loadConfig();
-  if (!config.projects.length) { log('无启用的项目，跳过'); return; }
+  const allProjects = [...config.projects, ...config.facebookProjects];
+  if (!allProjects.length) { log('无启用的项目，跳过'); return; }
 
   roundCount++;
   const startTime = Date.now();
   const fetcher = createFetcher(config.proxy);
 
-  log(`=== 第 ${roundCount} 轮 | ${config.projects.length} 个项目 ===`);
+  log(`=== 第 ${roundCount} 轮 | Reddit ${config.projects.length} / Facebook ${config.facebookProjects.length} 个项目 ===`);
 
   let totalNew = 0;
   const allTasks = [];
   const allErrors = [];
 
-  // Facebook fetcher (if configured)
-  let fbFetcher = null;
-  try {
-    if (config.facebook?.accessToken) fbFetcher = createFacebookFetcher(config.facebook);
-  } catch (e) { log(`Facebook fetcher 初始化失败: ${e.message}`); }
-
+  // Reddit projects
   for (const project of config.projects) {
-    // Reddit
     if (project.subreddits?.length) {
       const result = await runProject(project, fetcher);
       totalNew += result.newCount;
       allTasks.push(...result.tasks);
       allErrors.push(...result.errors);
     }
+  }
 
-    // Facebook: prefer API, fallback to browser automation
-    if (project.facebookGroups?.length) {
-      if (fbFetcher) {
-        try {
-          const fbResult = await runFacebookProject(project, fbFetcher);
-          totalNew += fbResult.newCount;
-          allTasks.push(...fbResult.tasks);
-          allErrors.push(...fbResult.errors);
-        } catch (e) { log(`  [${project.id}] Facebook API 出错: ${e.message}`); }
-      } else {
-        // Browser-based: respect fbPollIntervalHours
-        const fbInterval = (config.fbPollIntervalHours || 6) * 3600000;
-        if (Date.now() - lastFbScrapeTime >= fbInterval) {
+  // Facebook projects — browser-based, respect fbPollIntervalHours
+  if (config.facebookProjects.length) {
+    const fbInterval = (config.fbPollIntervalHours || 6) * 3600000;
+    if (Date.now() - lastFbScrapeTime >= fbInterval) {
+      for (const project of config.facebookProjects) {
+        if (project.facebookGroups?.length) {
           try {
             const fbResult = await runFacebookBrowserProject(project);
             totalNew += fbResult.newCount;
             allTasks.push(...fbResult.tasks);
             allErrors.push(...fbResult.errors);
-            lastFbScrapeTime = Date.now();
           } catch (e) { log(`  [${project.id}] Facebook 浏览器出错: ${e.message}`); }
-        } else {
-          const nextIn = Math.round((fbInterval - (Date.now() - lastFbScrapeTime)) / 60000);
-          log(`  [${project.id}] FB 浏览器抓取跳过，${nextIn}分钟后执行`);
         }
       }
+      lastFbScrapeTime = Date.now();
+    } else {
+      const nextIn = Math.round((fbInterval - (Date.now() - lastFbScrapeTime)) / 60000);
+      log(`  FB 浏览器抓取跳过，${nextIn}分钟后执行`);
     }
   }
 

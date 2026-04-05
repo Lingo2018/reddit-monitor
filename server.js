@@ -794,7 +794,7 @@ app.post('/api/fb-browser/scrape-all', auth, async (req, res) => {
 
   const cfg = loadConfig();
   const groups = [];
-  for (const project of cfg.projects) {
+  for (const project of cfg.facebookProjects || []) {
     for (const g of project.facebookGroups || []) {
       const gid = g.groupId || g;
       const gname = g.name || gid;
