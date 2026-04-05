@@ -553,18 +553,10 @@ async function renderData() {
 // --- Reports ---
 async function renderReports() {
   app.innerHTML = skeleton(3);
-  const pq = currentProject ? `?project=${currentProject}` : '';
-  let reports = await apiCached('/reports' + pq);
-  // Filter reports by platform: only show projects relevant to current platform
-  if (!currentProject && currentPlatform !== 'settings') {
-    const cfg = await apiCached('/config');
-    const platformProjects = new Set((cfg.projects || [])
-      .filter(p => currentPlatform === 'facebook'
-        ? (p.facebookGroups?.length > 0 && !p.subreddits?.length)
-        : (p.subreddits?.length > 0))
-      .map(p => p.id));
-    reports = reports.filter(r => platformProjects.has(r.project));
-  }
+  const sp = new URLSearchParams();
+  if (currentProject) sp.set('project', currentProject);
+  if (currentPlatform !== 'settings') sp.set('platform', currentPlatform);
+  const reports = await apiCached('/reports?' + sp.toString());
 
   if (!reports.length) {
     app.innerHTML = `<div class="section"><p style="color:var(--text-muted)">${t('noReports')}</p></div>`;

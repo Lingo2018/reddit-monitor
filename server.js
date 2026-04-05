@@ -320,10 +320,19 @@ app.get('/api/mentions/export', auth, (req, res) => {
 
 // --- Reports ---
 app.get('/api/reports', auth, (req, res) => {
-  const { project, limit = 30 } = req.query;
-  const cacheKey = `reports:${project||''}:${limit}`;
+  const { project, platform, limit = 30 } = req.query;
+  const cacheKey = `reports:${project||''}:${platform||''}:${limit}`;
   const result = cached(cacheKey, CACHE_TTL * 5, () => {
-    return project ? SQL.reportsByProject.all(project, +limit) : SQL.reports.all(+limit);
+    if (project) return SQL.reportsByProject.all(project, +limit);
+    if (platform) {
+      // Only return reports for projects that have mentions on this platform
+      return db.prepare(`
+        SELECT r.* FROM daily_reports r
+        WHERE r.project IN (SELECT DISTINCT project FROM mentions WHERE platform = ?)
+        ORDER BY r.report_date DESC LIMIT ?
+      `).all(platform, +limit);
+    }
+    return SQL.reports.all(+limit);
   });
   res.json(result);
 });
