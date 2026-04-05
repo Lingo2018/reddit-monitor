@@ -586,15 +586,17 @@ app.get('/api/poll-log', auth, (req, res) => {
 
 // --- User Rankings ---
 app.get('/api/users', auth, (req, res) => {
-  const { project, sort = 'karma', page = 1, limit = 50 } = req.query;
-  const cacheKey = `users:${project||''}:${sort}:${page}:${limit}`;
+  const { project, platform, sort = 'karma', page = 1, limit = 50 } = req.query;
+  const cacheKey = `users:${project||''}:${platform||''}:${sort}:${page}:${limit}`;
 
   const result = cached(cacheKey, CACHE_TTL * 2, () => {
   const lim = Math.min(+limit || 50, 100);
   const offset = (Math.max(1, +page) - 1) * lim;
 
-  const pw = project ? 'WHERE m.project = ?' : '';
-  const pp = project ? [project] : [];
+  const w = []; const pp = [];
+  if (project) { w.push('m.project = ?'); pp.push(project); }
+  if (platform) { w.push('m.platform = ?'); pp.push(platform); }
+  const pw = w.length ? 'WHERE ' + w.join(' AND ') : '';
 
   const orderMap = {
     karma: 'u.total_karma DESC',

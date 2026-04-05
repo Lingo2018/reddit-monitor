@@ -551,7 +551,15 @@ async function renderData() {
 async function renderReports() {
   app.innerHTML = skeleton(3);
   const pq = currentProject ? `?project=${currentProject}` : '';
-  const reports = await apiCached('/reports' + pq);
+  let reports = await apiCached('/reports' + pq);
+  // Filter reports by platform: only show projects relevant to current platform
+  if (!currentProject && currentPlatform !== 'settings') {
+    const cfg = await apiCached('/config');
+    const platformProjects = new Set((cfg.projects || [])
+      .filter(p => currentPlatform === 'facebook' ? (p.facebookGroups?.length > 0) : (p.subreddits?.length > 0))
+      .map(p => p.id));
+    reports = reports.filter(r => platformProjects.has(r.project));
+  }
 
   if (!reports.length) {
     app.innerHTML = `<div class="section"><p style="color:var(--text-muted)">${t('noReports')}</p></div>`;
@@ -721,6 +729,7 @@ async function renderUsers() {
   app.innerHTML = skeleton(5);
   const qObj = { ...userState, limit: 50 };
   if (currentProject) qObj.project = currentProject;
+  if (currentPlatform !== 'settings') qObj.platform = currentPlatform;
   const q = new URLSearchParams(qObj).toString();
   const d = await apiCached('/users?' + q);
 
