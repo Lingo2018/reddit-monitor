@@ -556,7 +556,9 @@ async function renderReports() {
   if (!currentProject && currentPlatform !== 'settings') {
     const cfg = await apiCached('/config');
     const platformProjects = new Set((cfg.projects || [])
-      .filter(p => currentPlatform === 'facebook' ? (p.facebookGroups?.length > 0) : (p.subreddits?.length > 0))
+      .filter(p => currentPlatform === 'facebook'
+        ? (p.facebookGroups?.length > 0 && !p.subreddits?.length)
+        : (p.subreddits?.length > 0))
       .map(p => p.id));
     reports = reports.filter(r => platformProjects.has(r.project));
   }
@@ -727,6 +729,7 @@ let userState = { page: 1, sort: 'karma' };
 
 async function renderUsers() {
   app.innerHTML = skeleton(5);
+  if (currentPlatform === 'facebook' && userState.sort === 'karma') userState.sort = 'activity';
   const qObj = { ...userState, limit: 50 };
   if (currentProject) qObj.project = currentProject;
   if (currentPlatform !== 'settings') qObj.platform = currentPlatform;
