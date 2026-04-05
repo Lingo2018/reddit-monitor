@@ -256,12 +256,15 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 8) {
 
         // Get author: find link with /user/ that contains a name-like text
         let author = 'Unknown';
+        let authorUrl = '';
         const userLinks = [...item.querySelectorAll('a[href*="/user/"], a[href*="profile.php"]')];
         for (const a of userLinks) {
           const name = a.innerText.trim();
-          // Author name is short, not a URL, not a timestamp
           if (name && name.length > 1 && name.length < 60 && !/^\d+[hmdw]/.test(name) && !/http/.test(name)) {
             author = name;
+            const href = a.getAttribute('href') || '';
+            const uidMatch = href.match(/\/user\/(\d+)/);
+            if (uidMatch) authorUrl = 'https://www.facebook.com/profile.php?id=' + uidMatch[1];
             break;
           }
         }
@@ -345,7 +348,7 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 8) {
           if (cm) commentCount = parseInt(cm[1]);
         }
 
-        results.push({ postId, body, author, permalink, timeText, reactions, commentCount });
+        results.push({ postId, body, author, authorUrl, permalink, timeText, reactions, commentCount });
       } catch {}
     }
 
@@ -411,10 +414,16 @@ export async function scrapePostComments(postUrl, maxScrolls = 5) {
 
       // Author from user link
       let author = 'Unknown';
+      let cAuthorUrl = '';
       const userLink = item.querySelector('a[href*="/user/"], a[href*="profile.php"]');
       if (userLink) {
         const name = userLink.innerText.trim();
-        if (name && name.length > 1 && name.length < 60) author = name;
+        if (name && name.length > 1 && name.length < 60) {
+          author = name;
+          const href = userLink.getAttribute('href') || '';
+          const uidMatch = href.match(/\/user\/(\d+)/);
+          if (uidMatch) cAuthorUrl = 'https://www.facebook.com/profile.php?id=' + uidMatch[1];
+        }
       }
       if (author === 'Unknown') {
         const strong = item.querySelector('strong');
@@ -424,7 +433,7 @@ export async function scrapePostComments(postUrl, maxScrolls = 5) {
         }
       }
 
-      results.push({ body, author });
+      results.push({ body, author: cAuthorUrl ? author + '|||' + cAuthorUrl : author });
     }
 
     // If role="article" didn't work, try comment-specific selectors
@@ -473,7 +482,7 @@ export async function scrapeGroup(groupId, groupName, maxScrolls = 8) {
       type: 'post',
       title: post.body.slice(0, 100),
       body: post.body,
-      author: post.author,
+      author: post.authorUrl ? post.author + '|||' + post.authorUrl : post.author,
       subreddit: groupName || groupId,
       permalink: post.permalink || groupUrl,
       score: post.reactions || 0,

@@ -497,7 +497,10 @@ async function renderData() {
         <thead><tr><th>${t('time')}</th><th style="min-width:50px">${t('type')}</th><th style="min-width:60px">${t('sentiment')}</th><th>${t('author')}</th>${currentPlatform !== 'facebook' ? '<th>Karma</th>' : ''}<th>${t('title_col')}</th><th>${t('aiSummary')}</th><th>${t('score')}</th></tr></thead>
         <tbody>${d.rows.map((r, i) => {
           const isFb = r.id?.startsWith('fb_') || currentPlatform === 'facebook';
-          const authorHtml = isFb ? esc(r.author) : `<a class="reddit-link" href="https://reddit.com/u/${r.author}" target="_blank">u/${r.author}</a>`;
+          const [authorName, authorUrl] = (r.author || '').split('|||');
+          const authorHtml = isFb
+            ? (authorUrl ? `<a class="reddit-link" href="${esc(authorUrl)}" target="_blank">${esc(authorName)}</a>` : esc(authorName))
+            : `<a class="reddit-link" href="https://reddit.com/u/${r.author}" target="_blank">u/${r.author}</a>`;
           const linkHref = isFb ? (r.permalink || '#') : ('https://reddit.com' + r.permalink);
           const titleText = esc(r.type === 'comment' ? (r.body?.slice(0, 100) || r.title || '-') : (r.title || r.body?.slice(0, 100) || '-'));
           return `<tr data-id="${r.id}" data-idx="${i}" class="data-row">
@@ -665,7 +668,10 @@ async function renderReportDetail(dateAndParams) {
         <thead><tr><th style="width:50px">${t('type')}</th><th style="width:100px">${t('author')}</th><th>${t('aiSummary')}</th><th style="width:70px"></th></tr></thead>
         <tbody>${r.negativeItems.map(n => {
           const nFb = n.permalink?.startsWith('http');
-          const authorHtml = nFb ? esc(n.author) : `<a class="reddit-link" href="https://reddit.com/u/${n.author}" target="_blank">u/${n.author}</a>`;
+          const [nAuthorName, nAuthorUrl] = (n.author||'').split('|||');
+          const authorHtml = nFb
+            ? (nAuthorUrl ? `<a class="reddit-link" href="${esc(nAuthorUrl)}" target="_blank">${esc(nAuthorName)}</a>` : esc(nAuthorName))
+            : `<a class="reddit-link" href="https://reddit.com/u/${n.author}" target="_blank">u/${n.author}</a>`;
           const linkHref = nFb ? n.permalink : ('https://reddit.com' + n.permalink);
           return `<tr>
           <td style="white-space:nowrap">${n.type === 'post' ? t('post') : t('comment')}</td>
@@ -768,7 +774,7 @@ async function renderUsers() {
           const isFb = currentPlatform === 'facebook';
           return `<tr>
             <td style="color:var(--text-muted)">${rank}</td>
-            <td>${isFb ? esc(r.author) : `<a class="reddit-link" href="https://reddit.com/u/${r.author}" target="_blank">u/${r.author}</a>`}</td>
+            <td>${isFb ? (() => { const [n,u] = (r.author||'').split('|||'); return u ? `<a class="reddit-link" href="${esc(u)}" target="_blank">${esc(n)}</a>` : esc(n); })() : `<a class="reddit-link" href="https://reddit.com/u/${r.author}" target="_blank">u/${r.author}</a>`}</td>
             ${!isFb ? `<td style="font-weight:700;color:var(--primary)">${r.total_karma != null ? fmtKarma(r.total_karma) : '-'}</td>` : ''}
             <td style="font-weight:600">${r.total_count}</td>
             <td>${r.post_count}</td>
