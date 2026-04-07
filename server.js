@@ -785,6 +785,40 @@ app.get('/api/fb-browser/debug-dom', auth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Import/export cookies manually
+app.post('/api/fb-browser/import-cookies', auth, async (req, res) => {
+  const { cookies } = req.body;
+  if (!Array.isArray(cookies) || !cookies.length) return res.status(400).json({ error: 'cookies array required' });
+  const hasCUser = cookies.some(c => c.name === 'c_user');
+  const hasXs = cookies.some(c => c.name === 'xs');
+  if (!hasCUser || !hasXs) return res.status(400).json({ error: 'need c_user and xs cookies' });
+  try {
+    const fs = await import('fs');
+    const cookiePath = path.join(__dirname, 'data', 'fb-cookies.json');
+    const dir = path.join(__dirname, 'data');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(cookiePath, JSON.stringify(cookies, null, 2));
+    res.json({ ok: true, count: cookies.length, loggedIn: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/fb-browser/clear-cookies', auth, async (req, res) => {
+  try {
+    const fs = await import('fs');
+    const cookiePath = path.join(__dirname, 'data', 'fb-cookies.json');
+    if (fs.existsSync(cookiePath)) fs.unlinkSync(cookiePath);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/fb-browser/export-cookies', auth, async (req, res) => {
+  try {
+    const fs = await import('fs');
+    const cookiePath = path.join(__dirname, 'data', 'fb-cookies.json');
+    res.json({ cookies: JSON.parse(fs.readFileSync(cookiePath, 'utf-8')) });
+  } catch { res.json({ cookies: [] }); }
+});
+
 app.get('/api/fb-browser/scrape-status', auth, (req, res) => {
   res.json({ running: fbScrapeRunning, log: fbScrapeLog });
 });

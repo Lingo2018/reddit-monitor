@@ -1114,6 +1114,19 @@ async function renderFacebookConfig() {
           (${browserStatus.cookies?.count || 0} cookies)
         </span>
       </div>
+      <details style="margin-bottom:12px">
+        <summary style="cursor:pointer;font-size:13px;color:var(--text-muted)">手动导入 Cookies（从其他已登录的环境复制）</summary>
+        <div style="margin-top:8px">
+          <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px">粘贴 JSON 格式的 Facebook Cookies 数组，至少需要 c_user 和 xs</p>
+          <textarea id="fb-cookies-input" rows="4" placeholder='[{"name":"c_user","value":"...","domain":".facebook.com"},{"name":"xs","value":"...","domain":".facebook.com"}]' style="width:100%;padding:8px;font-size:12px;font-family:monospace;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;color:var(--text);resize:vertical"></textarea>
+          <div style="margin-top:6px;display:flex;gap:8px;align-items:center">
+            <button class="btn btn-primary btn-sm" id="fb-import-cookies">导入 Cookies</button>
+            <button class="btn btn-outline btn-sm" id="fb-export-cookies" ${!cookieLoggedIn ? 'disabled' : ''}>导出当前 Cookies</button>
+            <button class="btn btn-outline btn-sm" id="fb-clear-cookies" style="color:var(--red)">清空 Cookies</button>
+            <span id="fb-cookies-result" style="font-size:12px"></span>
+          </div>
+        </div>
+      </details>
       <div id="fb-browser-view" style="display:${browserRunning ? 'block' : 'none'};margin-bottom:16px">
         <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#000;cursor:crosshair;max-width:600px" id="fb-screen-container">
           <img id="fb-screenshot" style="width:100%;display:block" alt="Browser view">
@@ -1293,6 +1306,40 @@ async function renderFacebookConfig() {
   $('#fb-scrape-all').onclick = async () => {
     try { const res = await api('/fb-browser/scrape-all', { method: 'POST' }); const d = await res.json(); if (d.ok) { toast(d.message); pollScrapeStatus(); } else toast(d.error || 'failed'); } catch (e) { toast(e.message); }
   };
+  // Cookie import/export/clear
+  $('#fb-import-cookies').onclick = async () => {
+    const resultEl = $('#fb-cookies-result');
+    try {
+      const raw = $('#fb-cookies-input').value.trim();
+      if (!raw) { resultEl.textContent = '请粘贴 Cookies JSON'; resultEl.style.color = 'var(--red)'; return; }
+      const cookies = JSON.parse(raw);
+      const res = await api('/fb-browser/import-cookies', { method: 'POST', body: { cookies } });
+      const d = await res.json();
+      if (d.ok) { resultEl.textContent = `导入成功 (${d.count} cookies)`; resultEl.style.color = 'var(--green)'; clearClientCache(); setTimeout(() => renderFacebookConfig(), 1000); }
+      else { resultEl.textContent = d.error; resultEl.style.color = 'var(--red)'; }
+    } catch (e) { resultEl.textContent = 'JSON 格式错误: ' + e.message; resultEl.style.color = 'var(--red)'; }
+  };
+
+  $('#fb-export-cookies').onclick = async () => {
+    try {
+      const res = await api('/fb-browser/export-cookies');
+      const d = await res.json();
+      if (d.cookies?.length) {
+        $('#fb-cookies-input').value = JSON.stringify(d.cookies, null, 2);
+        toast('Cookies 已导出到文本框，可复制');
+      } else { toast('没有已保存的 Cookies'); }
+    } catch (e) { toast(e.message); }
+  };
+
+  $('#fb-clear-cookies').onclick = async () => {
+    if (!confirm('确定清空所有 Facebook Cookies？')) return;
+    try {
+      await api('/fb-browser/clear-cookies', { method: 'POST' });
+      clearClientCache(); toast('Cookies 已清空');
+      renderFacebookConfig();
+    } catch (e) { toast(e.message); }
+  };
+
   updateScrapeLog();
 }
 
