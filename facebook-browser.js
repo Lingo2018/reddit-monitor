@@ -106,8 +106,11 @@ export async function startBrowser() {
   const stealthPkg = await import('puppeteer-extra-plugin-stealth');
   const stealth = stealthPkg.default();
 
-  // Reuse Playwright from semrush installation
-  const pw = await import('/home/lingo/projects/openclaw-hub/skills/semrush/node_modules/playwright/index.mjs');
+  // Use playwright from local node_modules (installed via playwright-extra)
+  let pw;
+  try { pw = await import('playwright'); } catch {
+    pw = await import('playwright-core');
+  }
   const chromium = addExtra(pw.chromium);
   chromium.use(stealth);
 

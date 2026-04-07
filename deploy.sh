@@ -35,17 +35,15 @@ npm install --omit=dev 2>&1 | tail -1
 
 # 4. 安装浏览器自动化环境（Playwright + Xvfb）
 echo "[4/6] 检查浏览器环境..."
-if ! npx playwright install --help &>/dev/null 2>&1; then
-  echo "  跳过（playwright-extra 未安装）"
-elif [ ! -d "$HOME/.cache/ms-playwright/chromium"* ] 2>/dev/null; then
-  echo "  安装 Chromium..."
-  npx playwright install chromium 2>&1 | tail -2
-  echo "  安装系统依赖..."
-  if command -v apt-get &>/dev/null; then
-    npx playwright install-deps chromium 2>&1 | tail -2
-  fi
-else
+if ls "$HOME/.cache/ms-playwright/chromium"* &>/dev/null; then
   echo "  Chromium 已安装"
+else
+  echo "  安装 Chromium..."
+  npx playwright install chromium 2>&1 | tail -3
+  if command -v apt-get &>/dev/null; then
+    echo "  安装系统依赖..."
+    npx playwright install-deps chromium 2>&1 | tail -3
+  fi
 fi
 if command -v apt-get &>/dev/null && ! command -v Xvfb &>/dev/null; then
   echo "  安装 Xvfb..."
