@@ -590,8 +590,9 @@ async function renderReports() {
       b.classList.add('active'); summaryRange = b.dataset.days;
       if (summaryRange !== 'all') { $('#summary-start').value = new Date(Date.now() - (+summaryRange) * 86400000).toISOString().slice(0, 10); $('#summary-end').value = new Date().toISOString().slice(0, 10); }
     }; });
-    $('#summary-start').onchange = () => { document.querySelectorAll('.sq-btn').forEach(x => x.classList.remove('active')); summaryRange = 'custom'; };
-    $('#summary-end').onchange = () => { document.querySelectorAll('.sq-btn').forEach(x => x.classList.remove('active')); summaryRange = 'custom'; };
+    const activateCustom = () => { document.querySelectorAll('.sq-btn').forEach(x => x.classList.toggle('active', x.dataset.days === 'custom')); summaryRange = 'custom'; };
+    $('#summary-start').onchange = activateCustom;
+    $('#summary-end').onchange = activateCustom;
     $('#gen-summary').onclick = async () => {
       if (!projectList.length) await loadProjects();
       const proj = getProjectId();
