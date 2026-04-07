@@ -125,6 +125,8 @@ export async function startBrowser() {
     '--no-sandbox', '--disable-setuid-sandbox',
     '--disable-blink-features=AutomationControlled',
     '--disable-dev-shm-usage',
+    '--disable-web-security',
+    '--disable-features=WebAuthentication',
     '--window-size=1440,900',
   ];
   if (proxyUrl) launchArgs.push('--proxy-server=' + proxyUrl);
@@ -161,6 +163,12 @@ export async function startBrowser() {
   }
 
   page = await context.newPage();
+
+  // Auto-dismiss browser dialogs (WebAuthn, alerts, etc.)
+  page.on('dialog', async dialog => {
+    log(`Auto-dismissing dialog: ${dialog.type()} - ${dialog.message()}`);
+    await dialog.dismiss().catch(() => {});
+  });
 
   // Navigate to Facebook login by default
   await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
