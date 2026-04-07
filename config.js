@@ -50,6 +50,7 @@ export function loadConfig() {
     ai: cfg.ai || null,
     facebook: cfg.facebook || null,
     fbPollIntervalHours: cfg.fbPollIntervalHours || 6,
+    fbScrollCount: cfg.fbScrollCount || 20,
   };
 }
 
@@ -67,7 +68,7 @@ export function getConfigForUI() {
 
 export function saveConfig(updates) {
   const cfg = readRaw();
-  const allowed = ['projects', 'facebookProjects', 'pollIntervalMinutes', 'fbPollIntervalHours', 'proxy', 'kookeey', 'webPassword', 'ai', 'localProxy', 'facebook'];
+  const allowed = ['projects', 'facebookProjects', 'pollIntervalMinutes', 'fbPollIntervalHours', 'fbScrollCount', 'proxy', 'kookeey', 'webPassword', 'ai', 'localProxy', 'facebook'];
 
   for (const key of allowed) {
     if (updates[key] !== undefined) {

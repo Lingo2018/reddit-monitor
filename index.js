@@ -129,7 +129,7 @@ async function runFacebookBrowserProject(project) {
     const groupName = group.name || groupId;
     try {
       log(`  [${pid}] FB Browser Group: ${groupName}`);
-      const mentions = await fbBrowser.scrapeGroup(groupId, groupName, 20);
+      const mentions = await fbBrowser.scrapeGroup(groupId, groupName, config.fbScrollCount || 20);
       tasks.push(`fb_browser:${groupName}`);
 
       if (mentions.length) {

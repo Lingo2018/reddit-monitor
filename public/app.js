@@ -1494,6 +1494,7 @@ async function renderGlobalSettings() {
       <div class="form-row">
         <div class="form-group"><label>Reddit 轮询间隔（分钟）</label><input id="c-interval" type="number" value="${cfg.pollIntervalMinutes || 8}" style="width:120px" autocomplete="off"></div>
         <div class="form-group"><label>Facebook 抓取间隔（小时）</label><input id="c-fb-interval" type="number" value="${cfg.fbPollIntervalHours || 6}" style="width:120px" autocomplete="off"></div>
+        <div class="form-group"><label>Facebook 滚动次数</label><input id="c-fb-scrolls" type="number" value="${cfg.fbScrollCount || 20}" style="width:120px" autocomplete="off"></div>
       </div>
       <div class="form-group"><label>${t('webPwd')}</label><input id="c-webpwd" type="password" value="" autocomplete="new-password" placeholder="${t('unchangedHint')}"></div>
     </div>
@@ -1509,6 +1510,7 @@ async function renderGlobalSettings() {
     const update = {
       pollIntervalMinutes: +$('#c-interval').value || 8,
       fbPollIntervalHours: +$('#c-fb-interval').value || 6,
+      fbScrollCount: +$('#c-fb-scrolls').value || 20,
       localProxy: { enabled: $('#c-lp-enabled').value === 'true', host: $('#c-lp-host').value.trim() || '127.0.0.1', port: +$('#c-lp-port').value || 10808 },
       ai: { endpoint: $('#c-ai-endpoint').value.trim(), model: $('#c-ai-model').value.trim() },
     };
