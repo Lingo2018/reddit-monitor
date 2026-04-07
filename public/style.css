@@ -282,6 +282,11 @@ a.reddit-link:hover { color: #fff; text-shadow: 0 0 10px rgba(0,200,255,0.4); }
 .skel-bar { flex: 1; height: 16px; border-radius: 8px; background: rgba(255,255,255,0.04); animation: pulse 1.5s ease infinite; }
 @keyframes pulse { 0%,100% { opacity: 0.4; } 50% { opacity: 0.8; } }
 
+/* === Date Input === */
+input[type="date"] {
+  color-scheme: dark;
+}
+
 /* === Scrollbar === */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
