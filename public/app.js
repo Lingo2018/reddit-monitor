@@ -403,6 +403,83 @@ async function renderStats() {
 
   const maxDay = Math.max(...d.byDay.map(r => r.count), 1);
 
+  // Build line chart SVG
+  const days = d.byDay || [];
+  const chartW = 700, chartH = 160, padL = 40, padR = 10, padT = 10, padB = 28;
+  const innerW = chartW - padL - padR, innerH = chartH - padT - padB;
+  let svgChart = '';
+  if (days.length > 1) {
+    const maxVal = Math.max(...days.map(r => r.count), 1);
+    const pts = days.map((r, i) => {
+      const x = padL + (i / (days.length - 1)) * innerW;
+      const y = padT + innerH - (r.count / maxVal) * innerH;
+      return { x, y, count: r.count, label: r.day.slice(5) };
+    });
+    const line = pts.map(p => `${p.x},${p.y}`).join(' ');
+    const area = `${padL},${padT + innerH} ${line} ${pts[pts.length-1].x},${padT + innerH}`;
+    // Y-axis labels
+    const yLabels = [0, Math.round(maxVal/2), maxVal].map((v, i) => {
+      const y = padT + innerH - (v / maxVal) * innerH;
+      return `<text x="${padL-6}" y="${y+4}" fill="var(--text-muted)" font-size="10" text-anchor="end">${v}</text><line x1="${padL}" y1="${y}" x2="${padL+innerW}" y2="${y}" stroke="rgba(255,255,255,0.06)" stroke-dasharray="4"/>`;
+    }).join('');
+    // X-axis labels (every few days)
+    const step = Math.max(1, Math.floor(days.length / 8));
+    const xLabels = pts.filter((_, i) => i % step === 0 || i === pts.length - 1)
+      .map(p => `<text x="${p.x}" y="${padT + innerH + 18}" fill="var(--text-muted)" font-size="10" text-anchor="middle">${p.label}</text>`).join('');
+    // Dots + tooltips
+    const dots = pts.map(p => `<circle cx="${p.x}" cy="${p.y}" r="3" fill="var(--primary)" opacity="0.8"><title>${p.label}: ${p.count}</title></circle>`).join('');
+    svgChart = `<svg viewBox="0 0 ${chartW} ${chartH}" style="width:100%;max-width:${chartW}px;height:auto">
+      ${yLabels}${xLabels}
+      <polygon points="${area}" fill="url(#lineGrad)" opacity="0.15"/>
+      <polyline points="${line}" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linejoin="round"/>
+      ${dots}
+      <defs><linearGradient id="lineGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--primary)"/><stop offset="100%" stop-color="transparent"/></linearGradient></defs>
+    </svg>`;
+  } else if (days.length === 1) {
+    svgChart = `<div style="text-align:center;padding:20px;color:var(--text-muted)">${days[0].day.slice(5)}: ${days[0].count} ${t('mentions')}</div>`;
+  }
+
+  // Detail table (collapsible)
+  const detailRows = (d.byDayDetail || []).slice(-14).reverse();
+  const detailTable = detailRows.length ? `
+    <details style="margin-top:12px">
+      <summary style="cursor:pointer;font-size:12px;color:var(--text-muted)">每日明细（${detailRows.length}天）</summary>
+      <table style="margin-top:8px;font-size:12px">
+        <thead><tr><th>${t('reportDate')}</th><th>${t('post')}</th><th>${t('comment')}</th><th>${t('positive')}</th><th>${t('negative')}</th><th>${t('neutral')}</th><th>${t('hotPosts')}</th></tr></thead>
+        <tbody>${detailRows.map(r => `<tr>
+          <td>${r.day}</td><td>${r.posts}</td><td>${r.comments}</td>
+          <td style="color:var(--green)">${r.positive}</td><td style="color:var(--red)">${r.negative}</td>
+          <td style="color:var(--orange)">${r.neutral}</td><td style="color:var(--primary)">${r.hot_posts}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </details>` : '';
+
+  // Top subs/groups (collapsible)
+  const topLabel = currentPlatform === 'facebook' ? 'Group' : 'Subreddit';
+  const topTitle = currentPlatform === 'facebook' ? '热门 Group' : t('topSubs');
+  const topTable = d.topSubs.length ? `
+    <details style="margin-top:12px">
+      <summary style="cursor:pointer;font-size:12px;color:var(--text-muted)">${topTitle}（${d.topSubs.length}）</summary>
+      <table style="margin-top:8px">
+        <thead><tr><th>${topLabel}</th><th>${t('mentions')}</th></tr></thead>
+        <tbody>${d.topSubs.map(s => `<tr><td>${currentPlatform === 'facebook' ? esc(s.subreddit) : 'r/' + s.subreddit}</td><td>${s.count}</td></tr>`).join('')}</tbody>
+      </table>
+    </details>` : '';
+
+  // Poll log (collapsible, both platforms)
+  const pollTable = d.recentPolls.length ? `
+    <details style="margin-top:12px">
+      <summary style="cursor:pointer;font-size:12px;color:var(--text-muted)">${t('recentPolls')}（${d.recentPolls.length}）</summary>
+      <table style="margin-top:8px">
+        <thead><tr><th>${t('time')}</th><th>${t('type')}</th><th>${t('newItems')}</th><th>${t('duration')}</th><th>${t('errors')}</th></tr></thead>
+        <tbody>${d.recentPolls.map(p => `<tr>
+          <td>${fmtTime(p.poll_time)}</td><td>${p.round_type}</td><td>${p.new_items}</td>
+          <td>${p.duration_ms ? (p.duration_ms / 1000).toFixed(1) + 's' : '-'}</td>
+          <td class="truncate">${p.errors || '-'}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </details>` : '';
+
   app.innerHTML = `
     <div class="stats-grid">
       <div class="stat-card"><div class="label">${t('totalMentions')}</div><div class="value brand">${d.total}</div></div>
@@ -417,49 +494,14 @@ async function renderStats() {
 
     <div class="section">
       <h3>${t('last30d')}</h3>
-      <div class="bar-chart" id="chart"></div>
-      ${(d.byDayDetail || []).length ? `
-      <table style="margin-top:16px;font-size:12px">
-        <thead><tr><th>${t('reportDate')}</th><th>${t('post')}</th><th>${t('comment')}</th><th>${t('positive')}</th><th>${t('negative')}</th><th>${t('neutral')}</th><th>${t('hotPosts')}</th></tr></thead>
-        <tbody>${(d.byDayDetail || []).slice(-14).reverse().map(r => `<tr>
-          <td>${r.day}</td>
-          <td>${r.posts}</td>
-          <td>${r.comments}</td>
-          <td style="color:var(--green)">${r.positive}</td>
-          <td style="color:var(--red)">${r.negative}</td>
-          <td style="color:var(--orange)">${r.neutral}</td>
-          <td style="color:var(--primary)">${r.hot_posts}</td>
-        </tr>`).join('')}</tbody>
-      </table>` : ''}
+      ${svgChart}
+      ${detailTable}
     </div>
 
     <div class="section">
-      <h3>${currentPlatform === 'facebook' ? '热门 Post' : t('topSubs')}</h3>
-      <table>
-        <thead><tr><th>${currentPlatform === 'facebook' ? 'Group' : 'Subreddit'}</th><th>${t('mentions')}</th></tr></thead>
-        <tbody>${d.topSubs.map(s => `<tr><td>${currentPlatform === 'facebook' ? esc(s.subreddit) : 'r/' + s.subreddit}</td><td>${s.count}</td></tr>`).join('')}</tbody>
-      </table>
-    </div>
-
-    ${currentPlatform !== 'facebook' ? `<div class="section">
-      <h3>${t('recentPolls')}</h3>
-      <table>
-        <thead><tr><th>${t('time')}</th><th>${t('type')}</th><th>${t('newItems')}</th><th>${t('duration')}</th><th>${t('errors')}</th></tr></thead>
-        <tbody>${d.recentPolls.map(p => `<tr>
-          <td>${fmtTime(p.poll_time)}</td>
-          <td>${p.round_type}</td>
-          <td>${p.new_items}</td>
-          <td>${p.duration_ms ? (p.duration_ms / 1000).toFixed(1) + 's' : '-'}</td>
-          <td class="truncate">${p.errors || '-'}</td>
-        </tr>`).join('')}</tbody>
-      </table>
-    </div>` : ''}`;
-
-  const chart = $('#chart');
-  d.byDay.forEach(r => {
-    const pct = (r.count / maxDay * 100).toFixed(1);
-    chart.innerHTML += `<div class="bar" style="height:${pct}%"><span class="bar-tip">${r.count}</span><span class="bar-label">${r.day.slice(5)}</span></div>`;
-  });
+      ${topTable}
+      ${pollTable}
+    </div>`;
 }
 
 // --- Data ---
