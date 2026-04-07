@@ -405,7 +405,7 @@ async function renderStats() {
 
   // Build line chart SVG
   const days = d.byDay || [];
-  const chartW = 700, chartH = 160, padL = 40, padR = 10, padT = 10, padB = 28;
+  const chartW = 700, chartH = 160, padL = 40, padR = 30, padT = 10, padB = 28;
   const innerW = chartW - padL - padR, innerH = chartH - padT - padB;
   let svgChart = '';
   if (days.length > 1) {
@@ -428,7 +428,7 @@ async function renderStats() {
       .map(p => `<text x="${p.x}" y="${padT + innerH + 18}" fill="var(--text-muted)" font-size="10" text-anchor="middle">${p.label}</text>`).join('');
     // Dots + tooltips
     const dots = pts.map(p => `<circle cx="${p.x}" cy="${p.y}" r="3" fill="var(--primary)" opacity="0.8"><title>${p.label}: ${p.count}</title></circle>`).join('');
-    svgChart = `<svg viewBox="0 0 ${chartW} ${chartH}" style="width:100%;max-width:${chartW}px;height:auto">
+    svgChart = `<svg viewBox="0 0 ${chartW} ${chartH}" style="width:100%;max-width:${chartW}px;height:auto;overflow:visible">
       ${yLabels}${xLabels}
       <polygon points="${area}" fill="url(#lineGrad)" opacity="0.15"/>
       <polyline points="${line}" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linejoin="round"/>
