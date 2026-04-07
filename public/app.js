@@ -1249,7 +1249,7 @@ async function renderFacebookConfig() {
       if (e.target.id === 'fb-type-input' || e.target.tagName === 'BUTTON') return;
       const rect = img.getBoundingClientRect();
       const x = Math.round((e.clientX - rect.left) * 800 / rect.width);
-      const y = Math.round((e.clientY - rect.top) * 700 / rect.height);
+      const y = Math.round((e.clientY - rect.top) * 500 / rect.height);
       await api('/fb-browser/action', { method: 'POST', body: { action: 'click', x, y } }).catch(() => {});
     };
 
