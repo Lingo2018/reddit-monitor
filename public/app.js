@@ -280,15 +280,16 @@ async function init() {
 
       // Sidebar clicks
       document.querySelectorAll('.sidebar-item').forEach(item => {
-        item.onclick = () => {
+        item.onclick = async () => {
           currentPlatform = item.dataset.platform;
           localStorage.setItem('rm-platform', currentPlatform);
           if (currentPlatform === 'settings') currentTab = 'config';
           else if (currentTab === 'config' && currentPlatform !== 'settings') currentTab = 'stats';
           currentProject = ''; localStorage.setItem('rm-project', '');
-          loadProjects();
+          clearClientCache();
           updateSidebar();
           updateTabs();
+          await loadProjects();
           route();
         };
       });
@@ -331,15 +332,16 @@ function showLogin() {
         route();
       };
       document.querySelectorAll('.sidebar-item').forEach(item => {
-        item.onclick = () => {
+        item.onclick = async () => {
           currentPlatform = item.dataset.platform;
           localStorage.setItem('rm-platform', currentPlatform);
           if (currentPlatform === 'settings') currentTab = 'config';
           else if (currentTab === 'config' && currentPlatform !== 'settings') currentTab = 'stats';
           currentProject = ''; localStorage.setItem('rm-project', '');
-          loadProjects();
+          clearClientCache();
           updateSidebar();
           updateTabs();
+          await loadProjects();
           route();
         };
       });
