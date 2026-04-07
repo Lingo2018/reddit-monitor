@@ -579,6 +579,7 @@ async function renderReports() {
           <button class="btn btn-sm btn-outline sq-btn" data-days="30">30天</button>
           <button class="btn btn-sm btn-outline sq-btn" data-days="90">90天</button>
           <button class="btn btn-sm btn-outline sq-btn" data-days="all">全部</button>
+          <button class="btn btn-sm btn-outline sq-btn" data-days="custom">自定义</button>
         </div>
         <input type="date" id="summary-start" value="${weekAgo2}" style="padding:4px 8px;font-size:12px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:6px;color:var(--text)">
         <span style="color:var(--text-muted)">~</span>
@@ -590,7 +591,7 @@ async function renderReports() {
     document.querySelectorAll('.sq-btn').forEach(b => { b.onclick = () => {
       document.querySelectorAll('.sq-btn').forEach(x => x.classList.remove('active'));
       b.classList.add('active'); summaryRange = b.dataset.days;
-      if (summaryRange !== 'all') { $('#summary-start').value = new Date(Date.now() - (+summaryRange) * 86400000).toISOString().slice(0, 10); $('#summary-end').value = new Date().toISOString().slice(0, 10); }
+      if (summaryRange !== 'all' && summaryRange !== 'custom') { $('#summary-start').value = new Date(Date.now() - (+summaryRange) * 86400000).toISOString().slice(0, 10); $('#summary-end').value = new Date().toISOString().slice(0, 10); }
     }; });
     const activateCustom = () => { document.querySelectorAll('.sq-btn').forEach(x => x.classList.toggle('active', x.dataset.days === 'custom')); summaryRange = 'custom'; };
     $('#summary-start').onchange = activateCustom;
