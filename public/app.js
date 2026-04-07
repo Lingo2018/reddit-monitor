@@ -618,6 +618,7 @@ async function renderReports() {
             <button class="btn btn-sm btn-outline sq-btn" data-days="30">30天</button>
             <button class="btn btn-sm btn-outline sq-btn" data-days="90">90天</button>
             <button class="btn btn-sm btn-outline sq-btn" data-days="all">全部</button>
+            <button class="btn btn-sm btn-outline sq-btn" data-days="custom">自定义</button>
           </div>
           <input type="date" id="summary-start" value="${weekAgo}" style="padding:4px 8px;font-size:12px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:6px;color:var(--text)">
           <span style="color:var(--text-muted)">~</span>
