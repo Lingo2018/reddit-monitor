@@ -167,7 +167,7 @@ function updateTabs() {
   }
   tabs.innerHTML = tabList.map(t => `<div class="tab-item${currentTab === t.id ? ' active' : ''}" data-tab="${t.id}">${t.label}</div>`).join('');
   tabs.querySelectorAll('.tab-item').forEach(tab => {
-    tab.onclick = () => { currentTab = tab.dataset.tab; updateTabs(); route(); };
+    tab.onclick = () => { currentTab = tab.dataset.tab; if (location.hash) history.replaceState(null, '', location.pathname); updateTabs(); route(); };
   });
 }
 
@@ -286,6 +286,7 @@ async function init() {
           if (currentPlatform === 'settings') currentTab = 'config';
           else if (currentTab === 'config' && currentPlatform !== 'settings') currentTab = 'stats';
           currentProject = ''; localStorage.setItem('rm-project', '');
+          if (location.hash) history.replaceState(null, '', location.pathname);
           clearClientCache();
           updateSidebar();
           updateTabs();
@@ -338,6 +339,7 @@ function showLogin() {
           if (currentPlatform === 'settings') currentTab = 'config';
           else if (currentTab === 'config' && currentPlatform !== 'settings') currentTab = 'stats';
           currentProject = ''; localStorage.setItem('rm-project', '');
+          if (location.hash) history.replaceState(null, '', location.pathname);
           clearClientCache();
           updateSidebar();
           updateTabs();
