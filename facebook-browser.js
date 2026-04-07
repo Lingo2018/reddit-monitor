@@ -1,12 +1,12 @@
 /**
  * Facebook Group Stealth Browser Scraper
  * Uses playwright-extra + stealth plugin + Xvfb to bypass Facebook detection.
- * Reuses Playwright installation from openclaw-hub/skills/semrush.
  */
 import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { loadConfig } from './config.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const COOKIE_PATH = path.join(__dirname, 'data', 'fb-cookies.json');
@@ -114,25 +114,36 @@ export async function startBrowser() {
   const chromium = addExtra(pw.chromium);
   chromium.use(stealth);
 
+  // Read proxy config
+  let proxyUrl = null;
+  try {
+    const cfg = loadConfig();
+    if (cfg.proxy?.local) proxyUrl = cfg.proxy.local;
+  } catch {}
+
+  const launchArgs = [
+    '--no-sandbox', '--disable-setuid-sandbox',
+    '--disable-blink-features=AutomationControlled',
+    '--disable-dev-shm-usage',
+    '--window-size=1440,900',
+  ];
+  if (proxyUrl) launchArgs.push('--proxy-server=' + proxyUrl);
+
   browser = await chromium.launch({
     headless: false,
-    args: [
-      '--no-sandbox', '--disable-setuid-sandbox',
-      '--disable-blink-features=AutomationControlled',
-      '--disable-dev-shm-usage',
-      '--window-size=1440,900',
-      '--proxy-server=http://127.0.0.1:10809',
-    ],
+    args: launchArgs,
     env: { ...process.env, DISPLAY: ':99' },
   });
 
-  context = await browser.newContext({
+  const contextOpts = {
     viewport: { width: 800, height: 500 },
     userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
     locale: 'en-US',
     timezoneId: 'America/New_York',
-    proxy: { server: 'http://127.0.0.1:10809' },
-  });
+  };
+  if (proxyUrl) contextOpts.proxy = { server: proxyUrl };
+
+  context = await browser.newContext(contextOpts);
 
   // Inject saved cookies
   const savedCookies = loadCookiesFromFile();
