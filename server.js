@@ -876,7 +876,7 @@ app.post('/api/fb-browser/scrape-all', auth, async (req, res) => {
       try {
         fbScrapeLog.push(`Scraping: ${g.groupName}...`);
         tasks.push(`fb_group:${g.groupName}`);
-        const mentions = await fbBrowser.scrapeGroup(g.groupId, g.groupName, 8);
+        const mentions = await fbBrowser.scrapeGroup(g.groupId, g.groupName, 20);
         fbScrapeLog.push(`  ${mentions.length} mentions from ${g.groupName}`);
         if (mentions.length) {
           const { saveMentions } = await import('./db.js');

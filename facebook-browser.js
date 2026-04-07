@@ -233,7 +233,7 @@ export async function navigateTo(url) {
 }
 
 // --- Scrape Facebook Group posts ---
-export async function scrapeGroupPosts(groupUrl, maxScrolls = 8) {
+export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
   if (!page) throw new Error('Browser not started');
 
   log(`Scraping group: ${groupUrl}`);
@@ -244,6 +244,21 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 8) {
   try {
     const closeBtn = await page.$('[aria-label="Close"]');
     if (closeBtn) { await closeBtn.click(); await randomDelay(500, 1000); }
+  } catch {}
+
+  // Select "Recent activity" sort
+  try {
+    const sortBtn = await page.$('span:has-text("Most relevant")');
+    if (sortBtn) {
+      await sortBtn.click();
+      await randomDelay(800, 1200);
+      const recentOption = await page.$('div[role="menuitem"]:has-text("Recent activity")');
+      if (recentOption) {
+        await recentOption.click();
+        await randomDelay(2000, 3000);
+        log('  Switched to Recent activity sort');
+      }
+    }
   } catch {}
 
   // Scroll to load more posts
@@ -276,7 +291,7 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 8) {
         const body = textBlocks.join('\n').slice(0, 5000);
         if (body.length < 10) continue;
 
-        // Get author: find link with /user/ that contains a name-like text
+        // Get author: find link with /user/ that has a name
         let author = 'Unknown';
         let authorUrl = '';
         const userLinks = [...item.querySelectorAll('a[href*="/user/"], a[href*="profile.php"]')];
@@ -285,18 +300,23 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 8) {
           if (name && name.length > 1 && name.length < 60 && !/^\d+[hmdw]/.test(name) && !/http/.test(name)) {
             author = name;
             const href = a.getAttribute('href') || '';
-            const uidMatch = href.match(/\/user\/(\d+)/);
-            if (uidMatch) authorUrl = 'https://www.facebook.com/profile.php?id=' + uidMatch[1];
+            // Use the full /groups/xxx/user/xxx link directly
+            if (href.includes('/user/') || href.includes('profile.php')) {
+              authorUrl = 'https://www.facebook.com' + href.split('?')[0];
+            }
             break;
           }
         }
-        // Fallback: first <strong> with short text that's not the post body
+        // Fallback: try all links for any with a short name text + user href
         if (author === 'Unknown') {
-          const strongs = [...item.querySelectorAll('strong')];
-          for (const s of strongs) {
-            const t = s.innerText.trim();
-            if (t && t.length > 1 && t.length < 50 && t !== body.slice(0, t.length)) {
-              author = t;
+          const allAs = [...item.querySelectorAll('a')];
+          for (const a of allAs) {
+            const href = a.getAttribute('href') || '';
+            if (!href.includes('/user/')) continue;
+            const name = a.innerText.trim();
+            if (name && name.length > 1 && name.length < 60 && !/^\d+[hmdw]/.test(name)) {
+              author = name;
+              authorUrl = 'https://www.facebook.com' + href.split('?')[0];
               break;
             }
           }
@@ -486,7 +506,7 @@ export async function scrapePostComments(postUrl, maxScrolls = 5) {
 }
 
 // --- Full group scrape: posts + comments → mentions format ---
-export async function scrapeGroup(groupId, groupName, maxScrolls = 8) {
+export async function scrapeGroup(groupId, groupName, maxScrolls = 20) {
   if (!page) throw new Error('Browser not started');
 
   // Support both numeric ID and text alias (e.g. "adbuyers")
@@ -496,7 +516,6 @@ export async function scrapeGroup(groupId, groupName, maxScrolls = 8) {
   const now = new Date().toISOString();
 
   for (const post of posts) {
-    // Convert timeText to approximate UTC timestamp
     const createdUtc = parseTimeText(post.timeText);
 
     allMentions.push({
@@ -516,34 +535,6 @@ export async function scrapeGroup(groupId, groupName, maxScrolls = 8) {
       category: 'facebook',
       platform: 'facebook',
     });
-
-    // Scrape comments for posts with permalink (limit to first 5 posts to avoid slowness)
-    if (post.permalink && allMentions.filter(m => m.type === 'comment').length < 50) {
-      await randomDelay(3000, 6000);
-      try {
-        const comments = await scrapePostComments(post.permalink, 3);
-        for (let ci = 0; ci < comments.length; ci++) {
-          const c = comments[ci];
-          allMentions.push({
-            id: 'fb_comment_' + post.postId + '_' + ci,
-            type: 'comment',
-            title: '',
-            body: c.body,
-            author: c.author,
-            subreddit: groupName || groupId,
-            permalink: post.permalink,
-            score: 0,
-            num_comments: 0,
-            created_utc: createdUtc,
-            discovered_at: now,
-            source: 'facebook_comment',
-            matched_keywords: '[]',
-            category: 'facebook',
-            platform: 'facebook',
-          });
-        }
-      } catch (e) { log(`  Comment scrape error: ${e.message}`); }
-    }
   }
 
   log(`Group ${groupName}: ${allMentions.length} total mentions (${posts.length} posts)`);
