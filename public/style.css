@@ -3,7 +3,7 @@
   --border: rgba(56, 78, 135, 0.3); --border-glow: rgba(0, 200, 255, 0.15);
   --primary: #00c8ff; --primary-dark: #0099cc; --primary-glow: rgba(0, 200, 255, 0.25);
   --accent: #7c5cfc; --accent-glow: rgba(124, 92, 252, 0.2);
-  --text: #e4e8f1; --text-light: #8e96aa; --text-muted: #555e73;
+  --text: #edf0f7; --text-light: #a8b0c4; --text-muted: #6e7891;
   --green: #00e676; --red: #ff3d71; --orange: #ffaa00; --purple: #a855f7;
   --glass: rgba(255,255,255,0.03);
   --gradient-header: linear-gradient(180deg, #0f1629 0%, #0d1225 100%);
@@ -160,13 +160,13 @@ body {
 .section h3::before { content: ''; width: 3px; height: 14px; background: var(--gradient-accent); border-radius: 2px; }
 
 /* === Table === */
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; line-height: 1.5; }
 th {
-  text-align: left; padding: 10px 12px; background: rgba(255,255,255,0.02);
-  border-bottom: 1px solid var(--border); font-weight: 600; color: var(--text-muted);
-  text-transform: uppercase; letter-spacing: 0.5px; font-size: 11px; white-space: nowrap;
+  text-align: left; padding: 10px 12px; background: rgba(255,255,255,0.03);
+  border-bottom: 1px solid var(--border); font-weight: 600; color: var(--text-light);
+  text-transform: uppercase; letter-spacing: 0.5px; font-size: 11.5px; white-space: nowrap;
 }
-td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.03); vertical-align: top; }
+td { padding: 11px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: top; color: var(--text); }
 tr { transition: .15s; }
 tr:hover { background: rgba(0,200,255,0.03); }
 .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; color: #fff; }
@@ -255,7 +255,7 @@ a.reddit-link:hover { color: #fff; text-shadow: 0 0 10px rgba(0,200,255,0.4); }
 .ai-cell.ai-expanded .ai-text { white-space: normal; word-break: break-word; line-height: 1.7; }
 
 /* === Report === */
-.report-content { font-size: 13px; line-height: 1.7; color: var(--text-light); }
+.report-content { font-size: 13.5px; line-height: 1.8; color: var(--text); }
 .report-content p { margin: 0; }
 .report-content h2 { font-size: 16px; margin: 18px 0 8px; color: var(--primary); font-weight: 700; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
 .report-content h3 { font-size: 14px; margin: 14px 0 6px; color: var(--text); }
