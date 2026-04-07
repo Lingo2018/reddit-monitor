@@ -745,15 +745,18 @@ app.post('/api/fb-browser/scrape-group', auth, async (req, res) => {
   if (fbScrapeRunning) return res.status(409).json({ error: 'scrape already running' });
 
   fbScrapeRunning = true;
+  const startTime = Date.now();
   fbScrapeLog = [`[${new Date().toISOString()}] Starting scrape: ${groupName || groupId}`];
   res.json({ ok: true, message: 'scrape started' });
 
   let autoStarted = false;
+  let newCount = 0;
+  const errors = [];
   try {
     if (!fbBrowser.getBrowserStatus().running) {
       fbScrapeLog.push('Auto-starting browser...');
       autoStarted = true;
-      if (!(await ensureBrowser())) { fbScrapeLog.push('Error: not logged in, please login first'); fbScrapeRunning = false; return; }
+      if (!(await ensureBrowser())) { fbScrapeLog.push('Error: not logged in, please login first'); errors.push('not logged in'); fbScrapeRunning = false; return; }
       fbScrapeLog.push('Browser ready');
     }
     const mentions = await fbBrowser.scrapeGroup(groupId, groupName || groupId, maxScrolls);
@@ -761,13 +764,15 @@ app.post('/api/fb-browser/scrape-group', auth, async (req, res) => {
     if (mentions.length) {
       const { saveMentions } = await import('./db.js');
       const cfg = loadConfig();
-      const project = cfg.projects.find(p => p.enabled !== false)?.id || 'default';
+      const project = [...(cfg.facebookProjects || [])].find(p => p.enabled !== false)?.id || 'default';
       const withProject = mentions.map(m => ({ ...m, project }));
-      const newCount = saveMentions(withProject);
+      newCount = saveMentions(withProject);
       fbScrapeLog.push(`Saved: ${newCount} new / ${mentions.length} total`);
     }
-  } catch (e) { fbScrapeLog.push(`Error: ${e.message}`); }
+  } catch (e) { fbScrapeLog.push(`Error: ${e.message}`); errors.push(e.message); }
   if (autoStarted) { await fbBrowser.stopBrowser().catch(() => {}); fbScrapeLog.push('Browser auto-closed'); }
+  const { logPoll } = await import('./db.js');
+  logPoll({ poll_time: new Date().toISOString(), round_type: 'facebook', tasks_run: JSON.stringify([`fb_group:${groupName || groupId}`]), new_items: newCount, errors: errors.length ? JSON.stringify(errors) : null, duration_ms: Date.now() - startTime });
   fbScrapeRunning = false;
 });
 
@@ -851,27 +856,33 @@ app.post('/api/fb-browser/scrape-all', auth, async (req, res) => {
   if (!groups.length) return res.status(400).json({ error: 'no Facebook groups configured' });
 
   fbScrapeRunning = true;
+  const startTime = Date.now();
   fbScrapeLog = [`[${new Date().toISOString()}] Batch scrape: ${groups.length} groups`];
   res.json({ ok: true, message: `scraping ${groups.length} groups` });
 
   let autoStarted = false;
+  let totalNew = 0;
+  const tasks = [];
+  const errors = [];
   try {
     if (!fbBrowser.getBrowserStatus().running) {
       fbScrapeLog.push('Auto-starting browser...');
       autoStarted = true;
-      if (!(await ensureBrowser())) { fbScrapeLog.push('Error: not logged in, please login first'); fbScrapeRunning = false; return; }
+      if (!(await ensureBrowser())) { fbScrapeLog.push('Error: not logged in, please login first'); errors.push('not logged in'); fbScrapeRunning = false; return; }
       fbScrapeLog.push('Browser ready');
     }
 
     for (const g of groups) {
       try {
         fbScrapeLog.push(`Scraping: ${g.groupName}...`);
+        tasks.push(`fb_group:${g.groupName}`);
         const mentions = await fbBrowser.scrapeGroup(g.groupId, g.groupName, 8);
         fbScrapeLog.push(`  ${mentions.length} mentions from ${g.groupName}`);
         if (mentions.length) {
           const { saveMentions } = await import('./db.js');
           const withProject = mentions.map(m => ({ ...m, project: g.project }));
           const newCount = saveMentions(withProject);
+          totalNew += newCount;
           fbScrapeLog.push(`  Saved: ${newCount} new`);
         }
         if (groups.indexOf(g) < groups.length - 1) {
@@ -879,12 +890,14 @@ app.post('/api/fb-browser/scrape-all', auth, async (req, res) => {
           fbScrapeLog.push(`  Waiting ${Math.round(wait / 1000)}s before next group...`);
           await new Promise(r => setTimeout(r, wait));
         }
-      } catch (e) { fbScrapeLog.push(`  Error on ${g.groupName}: ${e.message}`); }
+      } catch (e) { fbScrapeLog.push(`  Error on ${g.groupName}: ${e.message}`); errors.push(`${g.groupName}: ${e.message}`); }
     }
-  } catch (e) { fbScrapeLog.push(`Error: ${e.message}`); }
+  } catch (e) { fbScrapeLog.push(`Error: ${e.message}`); errors.push(e.message); }
 
   if (autoStarted) { await fbBrowser.stopBrowser().catch(() => {}); fbScrapeLog.push('Browser auto-closed'); }
   fbScrapeLog.push(`[${new Date().toISOString()}] Batch scrape complete`);
+  const { logPoll } = await import('./db.js');
+  logPoll({ poll_time: new Date().toISOString(), round_type: 'facebook', tasks_run: JSON.stringify(tasks), new_items: totalNew, errors: errors.length ? JSON.stringify(errors) : null, duration_ms: Date.now() - startTime });
   fbScrapeRunning = false;
 });
 
