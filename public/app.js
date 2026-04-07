@@ -466,8 +466,10 @@ async function renderStats() {
       </table>
     </details>` : '';
 
-  // Poll log (collapsible, both platforms)
-  const pollTable = d.recentPolls.length ? `
+  // Poll log (collapsible, Reddit only; Facebook shows scrape status)
+  let pollTable = '';
+  if (currentPlatform !== 'facebook' && d.recentPolls.length) {
+    pollTable = `
     <details style="margin-top:12px">
       <summary style="cursor:pointer;font-size:12px;color:var(--text-muted)">${t('recentPolls')}（${d.recentPolls.length}）</summary>
       <table style="margin-top:8px">
@@ -478,7 +480,10 @@ async function renderStats() {
           <td class="truncate">${p.errors || '-'}</td>
         </tr>`).join('')}</tbody>
       </table>
-    </details>` : '';
+    </details>`;
+  } else if (currentPlatform === 'facebook') {
+    pollTable = `<div id="fb-stats-scrape-log"></div>`;
+  }
 
   app.innerHTML = `
     <div class="stats-grid">
@@ -502,6 +507,21 @@ async function renderStats() {
       ${topTable}
       ${pollTable}
     </div>`;
+
+  // Load Facebook scrape log in stats view
+  if (currentPlatform === 'facebook') {
+    try {
+      const scrapeRes = await api('/fb-browser/scrape-status');
+      const scrapeData = await scrapeRes.json();
+      const logEl = $('#fb-stats-scrape-log');
+      if (logEl && scrapeData.log?.length) {
+        logEl.innerHTML = `<details style="margin-top:12px">
+          <summary style="cursor:pointer;font-size:12px;color:var(--text-muted)">抓取日志（${scrapeData.running ? '运行中...' : '最近'}）</summary>
+          <pre style="margin-top:8px;font-size:11px;color:var(--text-muted);background:rgba(0,0,0,0.2);padding:10px;border-radius:6px;max-height:200px;overflow-y:auto;white-space:pre-wrap">${esc(scrapeData.log.join('\n'))}</pre>
+        </details>`;
+      }
+    } catch {}
+  }
 }
 
 // --- Data ---
