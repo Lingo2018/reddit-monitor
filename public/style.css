@@ -283,9 +283,10 @@ a.reddit-link:hover { color: #fff; text-shadow: 0 0 10px rgba(0,200,255,0.4); }
 @keyframes pulse { 0%,100% { opacity: 0.4; } 50% { opacity: 0.8; } }
 
 /* === Date Input === */
-input[type="date"] {
+input[type="date"], input[type="date"]::-webkit-calendar-picker-indicator {
   color-scheme: dark;
 }
+input[type="date"] { color: #edf0f7 !important; }
 
 /* === Scrollbar === */
 ::-webkit-scrollbar { width: 6px; }
