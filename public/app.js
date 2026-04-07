@@ -572,23 +572,33 @@ async function renderReports() {
     app.innerHTML = `<div class="section">
       <p style="color:var(--text-muted);margin-bottom:12px">${t('noReports')}</p>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <div class="btn-group" id="summary-quick-btns">
+          <button class="btn btn-sm btn-outline sq-btn active" data-days="7">7天</button>
+          <button class="btn btn-sm btn-outline sq-btn" data-days="30">30天</button>
+          <button class="btn btn-sm btn-outline sq-btn" data-days="90">90天</button>
+          <button class="btn btn-sm btn-outline sq-btn" data-days="all">全部</button>
+        </div>
         <input type="date" id="summary-start" value="${weekAgo2}" style="padding:4px 8px;font-size:12px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:6px;color:var(--text)">
         <span style="color:var(--text-muted)">~</span>
         <input type="date" id="summary-end" value="${today2}" style="padding:4px 8px;font-size:12px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:6px;color:var(--text)">
-        <select id="summary-quick" style="padding:4px 8px;font-size:12px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:6px;color:var(--text)">
-          <option value="">自定义</option><option value="7" selected>近 7 天</option><option value="30">近 30 天</option><option value="90">近 90 天</option><option value="all">全部</option>
-        </select>
         <button class="btn btn-primary btn-sm" id="gen-summary">${t('genSummary')}</button>
       </div>
     </div>`;
-    $('#summary-quick').onchange = (e) => { const v = e.target.value; if (!v || v === 'all') return; $('#summary-start').value = new Date(Date.now() - (+v) * 86400000).toISOString().slice(0, 10); $('#summary-end').value = new Date().toISOString().slice(0, 10); };
+    let summaryRange = '7';
+    document.querySelectorAll('.sq-btn').forEach(b => { b.onclick = () => {
+      document.querySelectorAll('.sq-btn').forEach(x => x.classList.remove('active'));
+      b.classList.add('active'); summaryRange = b.dataset.days;
+      if (summaryRange !== 'all') { $('#summary-start').value = new Date(Date.now() - (+summaryRange) * 86400000).toISOString().slice(0, 10); $('#summary-end').value = new Date().toISOString().slice(0, 10); }
+    }; });
+    $('#summary-start').onchange = () => { document.querySelectorAll('.sq-btn').forEach(x => x.classList.remove('active')); summaryRange = 'custom'; };
+    $('#summary-end').onchange = () => { document.querySelectorAll('.sq-btn').forEach(x => x.classList.remove('active')); summaryRange = 'custom'; };
     $('#gen-summary').onclick = async () => {
       if (!projectList.length) await loadProjects();
       const proj = getProjectId();
       if (!proj || proj === 'default') { toast('无可用项目'); return; }
       const btn = $('#gen-summary'); btn.disabled = true; btn.innerHTML = '<span class="btn-spinner"></span>' + t('generating');
-      const quick = $('#summary-quick').value; const body = { project: proj };
-      if (quick !== 'all') { body.startDate = $('#summary-start').value; body.endDate = $('#summary-end').value; }
+      const body = { project: proj };
+      if (summaryRange !== 'all') { body.startDate = $('#summary-start').value; body.endDate = $('#summary-end').value; }
       try { const res = await api('/reports/summary', { method: 'POST', body }); const d = await res.json(); if (d.ok) { clearClientCache(); toast(t('reportGenerated')); renderReports(); } else toast(d.error || 'failed'); } catch (e) { toast(e.message); }
       btn.textContent = t('genSummary'); btn.disabled = false;
     };
@@ -603,16 +613,15 @@ async function renderReports() {
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
         <h3 style="margin:0">${t('reports')}</h3>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <div class="btn-group" id="summary-quick-btns">
+            <button class="btn btn-sm btn-outline sq-btn active" data-days="7">7天</button>
+            <button class="btn btn-sm btn-outline sq-btn" data-days="30">30天</button>
+            <button class="btn btn-sm btn-outline sq-btn" data-days="90">90天</button>
+            <button class="btn btn-sm btn-outline sq-btn" data-days="all">全部</button>
+          </div>
           <input type="date" id="summary-start" value="${weekAgo}" style="padding:4px 8px;font-size:12px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:6px;color:var(--text)">
           <span style="color:var(--text-muted)">~</span>
           <input type="date" id="summary-end" value="${today}" style="padding:4px 8px;font-size:12px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:6px;color:var(--text)">
-          <select id="summary-quick" style="padding:4px 8px;font-size:12px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:6px;color:var(--text)">
-            <option value="">自定义</option>
-            <option value="7" selected>近 7 天</option>
-            <option value="30">近 30 天</option>
-            <option value="90">近 90 天</option>
-            <option value="all">全部</option>
-          </select>
           <button class="btn btn-primary btn-sm" id="gen-summary">${t('genSummary')}</button>
         </div>
       </div>
@@ -651,14 +660,15 @@ async function renderReports() {
     };
   });
 
-  // Quick date range selector
-  $('#summary-quick').onchange = (e) => {
-    const v = e.target.value;
-    if (!v || v === 'all') return;
-    const days = +v;
-    $('#summary-start').value = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
-    $('#summary-end').value = new Date().toISOString().slice(0, 10);
-  };
+  // Quick date range buttons
+  let summaryRange = '7';
+  document.querySelectorAll('.sq-btn').forEach(b => { b.onclick = () => {
+    document.querySelectorAll('.sq-btn').forEach(x => x.classList.remove('active'));
+    b.classList.add('active'); summaryRange = b.dataset.days;
+    if (summaryRange !== 'all') { $('#summary-start').value = new Date(Date.now() - (+summaryRange) * 86400000).toISOString().slice(0, 10); $('#summary-end').value = new Date().toISOString().slice(0, 10); }
+  }; });
+  $('#summary-start').onchange = () => { document.querySelectorAll('.sq-btn').forEach(x => x.classList.remove('active')); summaryRange = 'custom'; };
+  $('#summary-end').onchange = () => { document.querySelectorAll('.sq-btn').forEach(x => x.classList.remove('active')); summaryRange = 'custom'; };
 
   $('#gen-summary').onclick = async () => {
     if (!projectList.length) await loadProjects();
@@ -667,12 +677,8 @@ async function renderReports() {
     const btn = $('#gen-summary');
     btn.disabled = true;
     btn.innerHTML = '<span class="btn-spinner"></span>' + t('generating');
-    const quick = $('#summary-quick').value;
     const body = { project: proj };
-    if (quick !== 'all') {
-      body.startDate = $('#summary-start').value;
-      body.endDate = $('#summary-end').value;
-    }
+    if (summaryRange !== 'all') { body.startDate = $('#summary-start').value; body.endDate = $('#summary-end').value; }
     try {
       const res = await api('/reports/summary', { method: 'POST', body });
       const d = await res.json();

@@ -198,6 +198,7 @@ a.reddit-link:hover { color: #fff; text-shadow: 0 0 10px rgba(0,200,255,0.4); }
 .btn-outline { background: rgba(255,255,255,0.04); border: 1px solid var(--border); color: var(--text-light); }
 .btn-outline:hover { border-color: var(--primary); color: var(--primary); background: rgba(0,200,255,0.05); }
 .btn-sm { padding: 5px 12px; font-size: 12px; }
+.btn-outline.active { border-color: var(--primary); color: var(--primary); background: rgba(0,200,255,0.1); }
 .btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
 
 /* === Pagination === */
