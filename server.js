@@ -325,12 +325,17 @@ app.get('/api/reports', auth, (req, res) => {
   const result = cached(cacheKey, CACHE_TTL * 5, () => {
     if (project) return SQL.reportsByProject.all(project, +limit);
     if (platform) {
-      // Only return reports for projects that have mentions on this platform
+      // Filter by platform's own project list from config
+      const cfg = loadConfig();
+      const ids = platform === 'facebook'
+        ? (cfg.facebookProjects || []).map(p => p.id)
+        : (cfg.projects || []).map(p => p.id);
+      if (!ids.length) return [];
       return db.prepare(`
         SELECT r.* FROM daily_reports r
-        WHERE r.project IN (SELECT DISTINCT project FROM mentions WHERE platform = ?)
+        WHERE r.project IN (${ids.map(() => '?').join(',')})
         ORDER BY r.report_date DESC LIMIT ?
-      `).all(platform, +limit);
+      `).all(...ids, +limit);
     }
     return SQL.reports.all(+limit);
   });
