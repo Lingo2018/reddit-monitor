@@ -1268,6 +1268,7 @@ async function renderFacebookConfig() {
       <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <button class="btn btn-outline" id="fb-add-project">${t('addProject')}</button>
         <button class="btn btn-primary btn-sm" id="fb-scrape-all">立即抓取全部 Group</button>
+        <button class="btn btn-outline btn-sm" id="fb-fix-authors">修复 Unknown 作者</button>
         <span id="fb-scrape-status" style="font-size:12px;color:var(--text-muted)"></span>
       </div>
       <pre id="fb-scrape-log" style="font-size:11px;color:var(--text-muted);background:rgba(0,0,0,0.2);padding:10px;border-radius:6px;max-height:200px;overflow-y:auto;white-space:pre-wrap;display:none;margin-top:10px"></pre>
@@ -1422,6 +1423,9 @@ async function renderFacebookConfig() {
 
   $('#fb-scrape-all').onclick = async () => {
     try { const res = await api('/fb-browser/scrape-all', { method: 'POST' }); const d = await res.json(); if (d.ok) { toast(d.message); pollScrapeStatus(); } else toast(d.error || 'failed'); } catch (e) { toast(e.message); }
+  };
+  $('#fb-fix-authors').onclick = async () => {
+    try { const res = await api('/fb-browser/fix-authors', { method: 'POST' }); const d = await res.json(); if (d.ok) { toast(d.message); pollScrapeStatus(); } else toast(d.error || 'failed'); } catch (e) { toast(e.message); }
   };
   // Cookie import/export/clear
   $('#fb-import-cookies').onclick = async () => {

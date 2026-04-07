@@ -837,6 +837,64 @@ app.get('/api/fb-browser/export-cookies', auth, async (req, res) => {
   } catch { res.json({ cookies: [] }); }
 });
 
+// One-time: fix Unknown authors by visiting each post permalink
+app.post('/api/fb-browser/fix-authors', auth, async (req, res) => {
+  if (fbScrapeRunning) return res.status(409).json({ error: 'scrape already running' });
+
+  const broken = db.prepare(`SELECT id, permalink FROM mentions WHERE platform='facebook' AND type='post' AND (author='Unknown' OR author NOT LIKE '%|||%') AND permalink LIKE 'https%/posts/%'`).all();
+  if (!broken.length) return res.json({ ok: true, message: 'no Unknown authors to fix' });
+
+  fbScrapeRunning = true;
+  fbScrapeLog = [`[${new Date().toISOString()}] Fixing ${broken.length} Unknown authors...`];
+  res.json({ ok: true, message: `fixing ${broken.length} posts` });
+
+  let autoStarted = false;
+  let fixed = 0;
+  try {
+    if (!fbBrowser.getBrowserStatus().running) {
+      autoStarted = true;
+      fbScrapeLog.push('Auto-starting browser...');
+      if (!(await ensureBrowser())) { fbScrapeLog.push('Error: not logged in'); fbScrapeRunning = false; return; }
+    }
+    const pg = fbBrowser.getPage();
+
+    for (let i = 0; i < broken.length; i++) {
+      const { id, permalink } = broken[i];
+      try {
+        fbScrapeLog.push(`  [${i+1}/${broken.length}] ${permalink.split('/posts/')[1] || permalink}`);
+        await pg.goto(permalink, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await new Promise(r => setTimeout(r, 2000 + Math.random() * 2000));
+
+        const author = await pg.evaluate(() => {
+          const userLinks = [...document.querySelectorAll('a[href*="/user/"]')];
+          for (const a of userLinks) {
+            const name = a.innerText.trim();
+            if (name && name.length > 1 && name.length < 60 && !/^\d+[hmdw]/.test(name) && !/http/.test(name)) {
+              const href = a.getAttribute('href') || '';
+              const url = href.includes('/user/') ? 'https://www.facebook.com' + href.split('?')[0] : '';
+              return { name, url };
+            }
+          }
+          return null;
+        });
+
+        if (author?.name && author.name !== 'Unknown') {
+          const authorStr = author.url ? author.name + '|||' + author.url : author.name;
+          db.prepare('UPDATE mentions SET author = ? WHERE id = ?').run(authorStr, id);
+          fixed++;
+        }
+
+        // Rate limit
+        await new Promise(r => setTimeout(r, 2000 + Math.random() * 3000));
+      } catch (e) { fbScrapeLog.push(`    Error: ${e.message}`); }
+    }
+  } catch (e) { fbScrapeLog.push(`Error: ${e.message}`); }
+
+  if (autoStarted) { await fbBrowser.stopBrowser().catch(() => {}); }
+  fbScrapeLog.push(`Fixed ${fixed}/${broken.length} authors`);
+  fbScrapeRunning = false;
+});
+
 app.get('/api/fb-browser/scrape-status', auth, (req, res) => {
   res.json({ running: fbScrapeRunning, log: fbScrapeLog });
 });
