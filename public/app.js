@@ -772,7 +772,7 @@ async function renderReportDetail(dateAndParams) {
 
   app.innerHTML = `
     <div style="margin-bottom:16px">
-      <a href="#reports" class="btn btn-outline btn-sm">&larr; ${t('reports')}</a>
+      <a href="#" id="back-to-reports" class="btn btn-outline btn-sm">&larr; ${t('reports')}</a>
     </div>
     <div class="stats-grid">
       <div class="stat-card"><div class="label">${t('reportTotal')}</div><div class="value brand">${r.total_count}</div></div>
@@ -803,6 +803,14 @@ async function renderReportDetail(dateAndParams) {
     <div class="section">
       <div class="report-content">${markdownToHtml(r.full_report || '')}</div>
     </div>`;
+
+  $('#back-to-reports').onclick = (e) => {
+    e.preventDefault();
+    history.replaceState(null, '', location.pathname);
+    currentTab = 'reports';
+    updateTabs();
+    route();
+  };
 }
 
 // Simple markdown renderer

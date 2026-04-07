@@ -178,10 +178,11 @@ app.get('/api/stats', auth, (req, res) => {
     const byCategory = db.prepare(`SELECT category, COUNT(*) as count FROM mentions m ${where} GROUP BY category`).all(...p);
     const topSubs = db.prepare(`SELECT subreddit, COUNT(*) as count FROM mentions m ${where} GROUP BY subreddit ORDER BY count DESC LIMIT 10`).all(...p);
     const recentPolls = SQL.recentPolls.all();
-    const byDay = db.prepare(`SELECT date(discovered_at) as day, COUNT(*) as count FROM mentions m ${whereAnd} m.discovered_at >= ? GROUP BY day ORDER BY day`).all(...p, since30d);
+    const byDay = db.prepare(`SELECT date(datetime(m.created_utc, 'unixepoch')) as day, COUNT(*) as count FROM mentions m ${whereAnd} m.created_utc >= ? GROUP BY day ORDER BY day`).all(...p, Math.floor((Date.now() - 30 * 86400000) / 1000));
 
+    const since30dUtc = Math.floor((Date.now() - 30 * 86400000) / 1000);
     const byDayDetail = db.prepare(`
-      SELECT date(m.discovered_at) as day,
+      SELECT date(datetime(m.created_utc, 'unixepoch')) as day,
         SUM(CASE WHEN m.type='post' THEN 1 ELSE 0 END) as posts,
         SUM(CASE WHEN m.type='comment' THEN 1 ELSE 0 END) as comments,
         SUM(CASE WHEN a.sentiment='positive' THEN 1 ELSE 0 END) as positive,
@@ -190,9 +191,9 @@ app.get('/api/stats', auth, (req, res) => {
         SUM(CASE WHEN m.type='post' AND m.score >= 10 THEN 1 ELSE 0 END) as hot_posts
       FROM mentions m
       LEFT JOIN analysis a ON m.id = a.mention_id AND m.project = a.project
-      ${whereAnd} m.discovered_at >= ?
+      ${whereAnd} m.created_utc >= ?
       GROUP BY day ORDER BY day
-    `).all(...p, since30d);
+    `).all(...p, since30dUtc);
 
     // Analysis stats (join mentions for platform filter)
     const aw2 = []; const ap2 = [];
