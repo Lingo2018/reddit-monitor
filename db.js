@@ -303,19 +303,23 @@ export function getProductsForPrompt(project) {
   }).join('\n\n');
 }
 
-export function getAllAnalysisStats(project) {
-  const pw = project ? 'WHERE m.project = ?' : '';
-  const pp = project ? [project] : [];
+export function getAllAnalysisStats(project, startDate, endDate) {
+  const w = []; const pp = [];
+  if (project) { w.push('m.project = ?'); pp.push(project); }
+  if (startDate) { w.push('m.discovered_at >= ?'); pp.push(startDate + 'T00:00:00.000Z'); }
+  if (endDate) { w.push('m.discovered_at <= ?'); pp.push(endDate + 'T23:59:59.999Z'); }
+  const pw = w.length ? 'WHERE ' + w.join(' AND ') : '';
+  const pwAnd = w.length ? pw + ' AND' : 'WHERE';
 
   const total = db.prepare(`SELECT COUNT(*) as c FROM mentions m ${pw}`).get(...pp).c;
-  const posts = db.prepare(`SELECT COUNT(*) as c FROM mentions m ${pw ? pw + ' AND' : 'WHERE'} m.type = 'post'`).get(...pp).c;
-  const comments = db.prepare(`SELECT COUNT(*) as c FROM mentions m ${pw ? pw + ' AND' : 'WHERE'} m.type = 'comment'`).get(...pp).c;
+  const posts = db.prepare(`SELECT COUNT(*) as c FROM mentions m ${pwAnd} m.type = 'post'`).get(...pp).c;
+  const comments = db.prepare(`SELECT COUNT(*) as c FROM mentions m ${pwAnd} m.type = 'comment'`).get(...pp).c;
 
   const sentiments = db.prepare(`SELECT a.sentiment, COUNT(*) as c FROM mentions m JOIN analysis a ON m.id = a.mention_id AND m.project = a.project ${pw} GROUP BY a.sentiment`).all(...pp);
   const sMap = {};
   sentiments.forEach(s => sMap[s.sentiment] = s.c);
 
-  const actionable = db.prepare(`SELECT COUNT(*) as c FROM mentions m JOIN analysis a ON m.id = a.mention_id AND m.project = a.project ${pw ? pw + ' AND' : 'WHERE'} a.actionable = 1`).get(...pp).c;
+  const actionable = db.prepare(`SELECT COUNT(*) as c FROM mentions m JOIN analysis a ON m.id = a.mention_id AND m.project = a.project ${pwAnd} a.actionable = 1`).get(...pp).c;
 
   const allAnalysis = db.prepare(`SELECT a.pros, a.cons, a.sentiment, a.summary, a.relevance, m.permalink, m.author, m.type FROM mentions m JOIN analysis a ON m.id = a.mention_id AND m.project = a.project ${pw}`).all(...pp);
 

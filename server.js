@@ -373,7 +373,7 @@ app.post('/api/reports/regenerate', auth, async (req, res) => {
     const cfg = loadConfig();
     if (!cfg.ai?.apiKey) return res.status(400).json({ error: 'AI not configured' });
 
-    const proj = cfg.projects.find(p => p.id === project);
+    const proj = [...(cfg.projects || []), ...(cfg.facebookProjects || [])].find(p => p.id === project);
     if (!proj) return res.status(404).json({ error: 'project not found' });
 
     const isSummary = date.startsWith('summary');
@@ -554,28 +554,28 @@ app.post('/api/reanalyze', auth, async (req, res) => {
 
 // --- Summary Report ---
 app.post('/api/reports/summary', auth, async (req, res) => {
-  const { project } = req.body;
+  const { project, startDate, endDate } = req.body;
   if (!project) return res.status(400).json({ error: 'project required' });
 
   try {
     const cfg = loadConfig();
     if (!cfg.ai?.apiKey) return res.status(400).json({ error: 'AI not configured' });
 
-    const proj = cfg.projects.find(p => p.id === project);
+    const proj = [...(cfg.projects || []), ...(cfg.facebookProjects || [])].find(p => p.id === project);
     if (!proj) return res.status(404).json({ error: 'project not found' });
 
     const { getAllAnalysisStats, saveDailyReport, getProductsForPrompt } = await import('./db.js');
     const { generateSummaryReport } = await import('./analyzer.js');
 
-    const stats = getAllAnalysisStats(project);
+    const stats = getAllAnalysisStats(project, startDate, endDate);
     if (stats.total === 0) return res.status(400).json({ error: 'no data' });
 
     const productInfo = getProductsForPrompt(project);
     const report = await generateSummaryReport(cfg.ai, proj, stats, productInfo);
     if (!report) return res.status(500).json({ error: '报告生成失败，可能是 AI 模型无法处理当前数据量。建议：1) 在设置中更换更大的模型 2) 检查 AI API 连接' });
 
-    const today = new Date().toISOString().slice(0, 10);
-    const reportDate = `summary-${today}`;
+    const label = startDate && endDate ? `${startDate}~${endDate}` : new Date().toISOString().slice(0, 10);
+    const reportDate = `summary-${label}`;
     db.prepare('DELETE FROM daily_reports WHERE report_date = ? AND project = ?').run(reportDate, project);
     saveDailyReport({
       project, report_date: reportDate,
@@ -590,6 +590,14 @@ app.post('/api/reports/summary', auth, async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// --- Delete Report ---
+app.delete('/api/reports/:id', auth, (req, res) => {
+  const id = +req.params.id;
+  db.prepare('DELETE FROM daily_reports WHERE id = ?').run(id);
+  invalidateAll();
+  res.json({ ok: true });
 });
 
 // --- Poll Log ---

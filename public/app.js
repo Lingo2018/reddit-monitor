@@ -567,28 +567,68 @@ async function renderReports() {
   const reports = await apiCached('/reports?' + sp.toString());
 
   if (!reports.length) {
-    app.innerHTML = `<div class="section"><p style="color:var(--text-muted)">${t('noReports')}</p></div>`;
+    const today2 = new Date().toISOString().slice(0, 10);
+    const weekAgo2 = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+    app.innerHTML = `<div class="section">
+      <p style="color:var(--text-muted);margin-bottom:12px">${t('noReports')}</p>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <input type="date" id="summary-start" value="${weekAgo2}" style="padding:4px 8px;font-size:12px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:6px;color:var(--text)">
+        <span style="color:var(--text-muted)">~</span>
+        <input type="date" id="summary-end" value="${today2}" style="padding:4px 8px;font-size:12px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:6px;color:var(--text)">
+        <select id="summary-quick" style="padding:4px 8px;font-size:12px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:6px;color:var(--text)">
+          <option value="">自定义</option><option value="7" selected>近 7 天</option><option value="30">近 30 天</option><option value="90">近 90 天</option><option value="all">全部</option>
+        </select>
+        <button class="btn btn-primary btn-sm" id="gen-summary">${t('genSummary')}</button>
+      </div>
+    </div>`;
+    $('#summary-quick').onchange = (e) => { const v = e.target.value; if (!v || v === 'all') return; $('#summary-start').value = new Date(Date.now() - (+v) * 86400000).toISOString().slice(0, 10); $('#summary-end').value = new Date().toISOString().slice(0, 10); };
+    $('#gen-summary').onclick = async () => {
+      if (!projectList.length) await loadProjects();
+      const proj = getProjectId();
+      if (!proj || proj === 'default') { toast('无可用项目'); return; }
+      const btn = $('#gen-summary'); btn.disabled = true; btn.innerHTML = '<span class="btn-spinner"></span>' + t('generating');
+      const quick = $('#summary-quick').value; const body = { project: proj };
+      if (quick !== 'all') { body.startDate = $('#summary-start').value; body.endDate = $('#summary-end').value; }
+      try { const res = await api('/reports/summary', { method: 'POST', body }); const d = await res.json(); if (d.ok) { clearClientCache(); toast(t('reportGenerated')); renderReports(); } else toast(d.error || 'failed'); } catch (e) { toast(e.message); }
+      btn.textContent = t('genSummary'); btn.disabled = false;
+    };
     return;
   }
 
+  const today = new Date().toISOString().slice(0, 10);
+  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+
   app.innerHTML = `
     <div class="section">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
         <h3 style="margin:0">${t('reports')}</h3>
-        <button class="btn btn-primary btn-sm" id="gen-summary">${t('genSummary')}</button>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <input type="date" id="summary-start" value="${weekAgo}" style="padding:4px 8px;font-size:12px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:6px;color:var(--text)">
+          <span style="color:var(--text-muted)">~</span>
+          <input type="date" id="summary-end" value="${today}" style="padding:4px 8px;font-size:12px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:6px;color:var(--text)">
+          <select id="summary-quick" style="padding:4px 8px;font-size:12px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:6px;color:var(--text)">
+            <option value="">自定义</option>
+            <option value="7" selected>近 7 天</option>
+            <option value="30">近 30 天</option>
+            <option value="90">近 90 天</option>
+            <option value="all">全部</option>
+          </select>
+          <button class="btn btn-primary btn-sm" id="gen-summary">${t('genSummary')}</button>
+        </div>
       </div>
       <table>
         <thead><tr><th>${t('reportDate')}</th><th>${t('reportTotal')}</th><th>${t('positive')}</th><th>${t('negative')}</th><th>${t('neutral')}</th><th>${t('actionable')}</th><th></th></tr></thead>
         <tbody>${reports.map(r => `<tr>
-          <td style="white-space:nowrap">${r.report_date.startsWith('summary') ? r.report_date : r.report_date}${r.created_at ? '<br><span style="font-size:11px;color:var(--text-muted)">' + fmtTime(r.created_at) + '</span>' : ''}</td>
+          <td style="white-space:nowrap">${r.report_date}${r.created_at ? '<br><span style="font-size:11px;color:var(--text-muted)">' + fmtTime(r.created_at) + '</span>' : ''}</td>
           <td>${r.total_count}</td>
           <td style="color:var(--green)">${r.positive_count}</td>
           <td style="color:var(--red)">${r.negative_count}</td>
           <td style="color:var(--orange)">${r.neutral_count}</td>
           <td>${r.actionable_count}</td>
-          <td>
+          <td style="white-space:nowrap">
             <a href="#report/${r.report_date}?p=${r.project}" class="btn btn-sm btn-outline">${t('viewReport')}</a>
             <button class="btn btn-sm btn-outline regen-btn" data-date="${r.report_date}" data-project="${r.project}" style="margin-left:4px">${t('regenerateReport')}</button>
+            <button class="btn btn-sm btn-outline del-report-btn" data-id="${r.id}" style="margin-left:4px;color:var(--red)">${t('deleteProject')}</button>
           </td>
         </tr>`).join('')}</tbody>
       </table>
@@ -611,6 +651,15 @@ async function renderReports() {
     };
   });
 
+  // Quick date range selector
+  $('#summary-quick').onchange = (e) => {
+    const v = e.target.value;
+    if (!v || v === 'all') return;
+    const days = +v;
+    $('#summary-start').value = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+    $('#summary-end').value = new Date().toISOString().slice(0, 10);
+  };
+
   $('#gen-summary').onclick = async () => {
     if (!projectList.length) await loadProjects();
     const proj = getProjectId();
@@ -618,22 +667,32 @@ async function renderReports() {
     const btn = $('#gen-summary');
     btn.disabled = true;
     btn.innerHTML = '<span class="btn-spinner"></span>' + t('generating');
-    try {
-      const res = await api('/reports/summary', { method: 'POST', body: { project: proj } });
-      const d = await res.json();
-      if (d.ok) {
-        clearClientCache();
-        toast(t('reportGenerated'));
-        renderReports();
-      } else {
-        toast(d.error || 'failed');
-      }
-    } catch (e) {
-      toast(e.message);
+    const quick = $('#summary-quick').value;
+    const body = { project: proj };
+    if (quick !== 'all') {
+      body.startDate = $('#summary-start').value;
+      body.endDate = $('#summary-end').value;
     }
+    try {
+      const res = await api('/reports/summary', { method: 'POST', body });
+      const d = await res.json();
+      if (d.ok) { clearClientCache(); toast(t('reportGenerated')); renderReports(); }
+      else toast(d.error || 'failed');
+    } catch (e) { toast(e.message); }
     btn.textContent = t('genSummary');
     btn.disabled = false;
   };
+
+  // Delete report
+  document.querySelectorAll('.del-report-btn').forEach(btn => {
+    btn.onclick = async () => {
+      if (!confirm('确定删除此报告？')) return;
+      try {
+        await api('/reports/' + btn.dataset.id, { method: 'DELETE' });
+        clearClientCache(); renderReports();
+      } catch (e) { toast(e.message); }
+    };
+  });
 }
 
 async function renderReportDetail(dateAndParams) {
