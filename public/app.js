@@ -1305,10 +1305,8 @@ async function renderFacebookConfig() {
             <button class="btn btn-outline btn-sm fp-del">${t('deleteProject')}</button>
           </div>
         </div>
-        <div class="form-row">
-          <div class="form-group"><label>${t('projectId')}</label><input class="fp-id" value="${esc(p.id || '')}" autocomplete="off"></div>
-          <div class="form-group"><label>${t('projectName')}</label><input class="fp-name" value="${esc(p.name || '')}" autocomplete="off"></div>
-        </div>
+        <input type="hidden" class="fp-id" value="${esc(p.id || '')}">
+        <div class="form-group"><label>${t('projectName')}</label><input class="fp-name" value="${esc(p.name || '')}" autocomplete="off"></div>
         <div class="form-group"><label>${t('reportRole')}</label><textarea class="fp-role" rows="2" placeholder="${t('reportRoleHint')}">${esc(p.reportRole || '')}</textarea></div>
         <div class="form-group"><label>${t('fbGroups')}</label><textarea class="fp-groups" rows="3" placeholder="groupId:名称，每行一个">${(p.facebookGroups || []).map(g => typeof g === 'string' ? g : g.groupId + ':' + (g.name || '')).join('\n')}</textarea></div>
       </div>`).join('');
@@ -1323,7 +1321,7 @@ async function renderFacebookConfig() {
   renderFbProjects();
 
   $('#fb-add-project').onclick = () => {
-    fbProjects.push({ id: '', name: '', enabled: true, facebookGroups: [] });
+    fbProjects.push({ id: 'fb_' + Date.now().toString(36), name: '', enabled: true, facebookGroups: [] });
     renderFbProjects();
   };
 
@@ -1335,10 +1333,12 @@ async function renderFacebookConfig() {
         const [gid, ...rest] = l.split(':');
         return { groupId: gid.trim(), name: rest.join(':').trim() || gid.trim() };
       });
+      const name = c.querySelector('.fp-name').value.trim();
+      const existingId = c.querySelector('.fp-id').value.trim();
       return {
         ...(fbProjects[i] || {}),
-        id: c.querySelector('.fp-id').value.trim(),
-        name: c.querySelector('.fp-name').value.trim(),
+        id: existingId || name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'fb_' + Date.now().toString(36),
+        name,
         reportRole: c.querySelector('.fp-role').value.trim(),
         enabled: c.querySelector('.fp-enabled').checked,
         facebookGroups: groups,
@@ -1579,10 +1579,8 @@ async function renderConfig() {
             <button class="btn btn-outline btn-sm del-project">${t('deleteProject')}</button>
           </div>
         </div>
-        <div class="form-row">
-          <div class="form-group"><label>${t('projectId')}</label><input class="p-id" value="${esc(p.id || '')}" autocomplete="off"></div>
-          <div class="form-group"><label>${t('projectName')}</label><input class="p-name" value="${esc(p.name || '')}" autocomplete="off"></div>
-        </div>
+        <input type="hidden" class="p-id" value="${esc(p.id || '')}">
+        <div class="form-group"><label>${t('projectName')}</label><input class="p-name" value="${esc(p.name || '')}" autocomplete="off"></div>
         <div class="form-group"><label>${t('reportRole')}</label><textarea class="p-role" rows="2" placeholder="${t('reportRoleHint')}">${esc(p.reportRole || '')}</textarea></div>
         <div class="form-group"><label>${t('subreddits')}</label><textarea class="p-subs">${(p.subreddits || []).join('\n')}</textarea></div>
       </div>`).join('');
@@ -1595,21 +1593,25 @@ async function renderConfig() {
   renderProjects(projects);
 
   $('#add-project').onclick = () => {
-    projects.push({ id: '', name: '', enabled: true, subreddits: [] });
+    projects.push({ id: 'rd_' + Date.now().toString(36), name: '', enabled: true, subreddits: [] });
     renderProjects(projects);
   };
 
   const doSave = async () => {
     const lines = v => v.split('\n').map(s => s.trim()).filter(Boolean);
     const cards = document.querySelectorAll('.project-card');
-    const updatedProjects = [...cards].map(c => ({
-      ...((cfg.projects || [])[+c.dataset.idx] || {}),
-      id: c.querySelector('.p-id').value.trim(),
-      name: c.querySelector('.p-name').value.trim(),
-      reportRole: c.querySelector('.p-role').value.trim(),
-      enabled: c.querySelector('.p-enabled').checked,
-      subreddits: lines(c.querySelector('.p-subs').value),
-    }));
+    const updatedProjects = [...cards].map(c => {
+      const name = c.querySelector('.p-name').value.trim();
+      const existingId = c.querySelector('.p-id').value.trim();
+      return {
+        ...((cfg.projects || [])[+c.dataset.idx] || {}),
+        id: existingId || name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'rd_' + Date.now().toString(36),
+        name,
+        reportRole: c.querySelector('.p-role').value.trim(),
+        enabled: c.querySelector('.p-enabled').checked,
+        subreddits: lines(c.querySelector('.p-subs').value),
+      };
+    });
     try {
       await api('/config', { method: 'PUT', body: { projects: updatedProjects } });
       clearClientCache();
