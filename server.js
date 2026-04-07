@@ -841,12 +841,18 @@ app.get('/api/fb-browser/export-cookies', auth, async (req, res) => {
 app.post('/api/fb-browser/fix-authors', auth, async (req, res) => {
   if (fbScrapeRunning) return res.status(409).json({ error: 'scrape already running' });
 
-  const broken = db.prepare(`SELECT id, permalink FROM mentions WHERE platform='facebook' AND type='post' AND (author='Unknown' OR author NOT LIKE '%|||%') AND permalink LIKE 'https%/posts/%'`).all();
+  const broken = db.prepare(`SELECT id, permalink FROM mentions WHERE platform='facebook' AND (author='Unknown' OR author NOT LIKE '%|||%') AND permalink LIKE 'https%/posts/%'`).all();
+  // Deduplicate by permalink (multiple comments share same post URL)
+  const seen = new Set();
+  const uniquePermalinks = [];
+  for (const row of broken) {
+    if (!seen.has(row.permalink)) { seen.add(row.permalink); uniquePermalinks.push(row.permalink); }
+  }
   if (!broken.length) return res.json({ ok: true, message: 'no Unknown authors to fix' });
 
   fbScrapeRunning = true;
-  fbScrapeLog = [`[${new Date().toISOString()}] Fixing ${broken.length} Unknown authors...`];
-  res.json({ ok: true, message: `fixing ${broken.length} posts` });
+  fbScrapeLog = [`[${new Date().toISOString()}] Fixing authors: ${broken.length} mentions across ${uniquePermalinks.length} posts...`];
+  res.json({ ok: true, message: `fixing ${broken.length} mentions (${uniquePermalinks.length} posts)` });
 
   let autoStarted = false;
   let fixed = 0;
@@ -858,18 +864,21 @@ app.post('/api/fb-browser/fix-authors', auth, async (req, res) => {
     }
     const pg = fbBrowser.getPage();
 
-    for (let i = 0; i < broken.length; i++) {
-      const { id, permalink } = broken[i];
+    for (let i = 0; i < uniquePermalinks.length; i++) {
+      const permalink = uniquePermalinks[i];
       try {
-        fbScrapeLog.push(`  [${i+1}/${broken.length}] ${permalink.split('/posts/')[1] || permalink}`);
+        fbScrapeLog.push(`  [${i+1}/${uniquePermalinks.length}] ${permalink.split('/posts/')[1] || permalink}`);
         await pg.goto(permalink, { waitUntil: 'domcontentloaded', timeout: 30000 });
         await new Promise(r => setTimeout(r, 2000 + Math.random() * 2000));
 
-        const author = await pg.evaluate(() => {
+        // Extract post author (first /user/ link with a real name)
+        const postAuthor = await pg.evaluate(() => {
+          // Skip common false positives
+          const skip = /^(active|online|offline|admin|moderator|member|top contributor)/i;
           const userLinks = [...document.querySelectorAll('a[href*="/user/"]')];
           for (const a of userLinks) {
             const name = a.innerText.trim();
-            if (name && name.length > 1 && name.length < 60 && !/^\d+[hmdw]/.test(name) && !/http/.test(name)) {
+            if (name && name.length > 1 && name.length < 60 && !skip.test(name) && !/^\d+[hmdw]/.test(name) && !/http/.test(name)) {
               const href = a.getAttribute('href') || '';
               const url = href.includes('/user/') ? 'https://www.facebook.com' + href.split('?')[0] : '';
               return { name, url };
@@ -878,20 +887,22 @@ app.post('/api/fb-browser/fix-authors', auth, async (req, res) => {
           return null;
         });
 
-        if (author?.name && author.name !== 'Unknown') {
-          const authorStr = author.url ? author.name + '|||' + author.url : author.name;
-          db.prepare('UPDATE mentions SET author = ? WHERE id = ?').run(authorStr, id);
-          fixed++;
+        if (postAuthor?.name) {
+          const authorStr = postAuthor.url ? postAuthor.name + '|||' + postAuthor.url : postAuthor.name;
+          // Update post
+          const r1 = db.prepare(`UPDATE mentions SET author = ? WHERE permalink = ? AND type = 'post' AND (author = 'Unknown' OR author NOT LIKE '%|||%')`).run(authorStr, permalink);
+          // Update comments on this post — use post author as fallback for Unknown comments
+          const r2 = db.prepare(`UPDATE mentions SET author = ? WHERE permalink = ? AND type = 'comment' AND author = 'Unknown'`).run(authorStr, permalink);
+          fixed += r1.changes + r2.changes;
         }
 
-        // Rate limit
         await new Promise(r => setTimeout(r, 2000 + Math.random() * 3000));
       } catch (e) { fbScrapeLog.push(`    Error: ${e.message}`); }
     }
   } catch (e) { fbScrapeLog.push(`Error: ${e.message}`); }
 
   if (autoStarted) { await fbBrowser.stopBrowser().catch(() => {}); }
-  fbScrapeLog.push(`Fixed ${fixed}/${broken.length} authors`);
+  fbScrapeLog.push(`Fixed ${fixed}/${broken.length} mentions`);
   fbScrapeRunning = false;
 });
 
