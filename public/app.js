@@ -1491,7 +1491,7 @@ async function renderGlobalSettings() {
 
     <div class="section">
       <h3>${t('pollSetting')}</h3>
-      <div class="form-row">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
         <div class="form-group"><label>Reddit 轮询间隔（分钟）</label><input id="c-interval" type="number" value="${cfg.pollIntervalMinutes || 8}" style="width:120px" autocomplete="off"></div>
         <div class="form-group"><label>Facebook 抓取间隔（小时）</label><input id="c-fb-interval" type="number" value="${cfg.fbPollIntervalHours || 6}" style="width:120px" autocomplete="off"></div>
         <div class="form-group"><label>Facebook 滚动次数</label><input id="c-fb-scrolls" type="number" value="${cfg.fbScrollCount || 20}" style="width:120px" autocomplete="off"></div>
