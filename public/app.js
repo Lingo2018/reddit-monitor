@@ -647,7 +647,7 @@ async function renderReports() {
     $('#gen-summary').onclick = async () => {
       if (!projectList.length) await loadProjects();
       const proj = getProjectId();
-      if (!proj || proj === 'default') { toast('无可用项目'); return; }
+      if (!proj || proj === 'default') { toast('无可用项目 (proj=' + proj + ', list=' + projectList.length + ')'); return; }
       const btn = $('#gen-summary'); btn.disabled = true; btn.innerHTML = '<span class="btn-spinner"></span>' + t('generating');
       const body = { project: proj };
       if (summaryRange !== 'all') { body.startDate = $('#summary-start').value; body.endDate = $('#summary-end').value; }

@@ -77,7 +77,7 @@ async function callLLM(config, prompt, systemPrompt) {
         'Content-Length': Buffer.byteLength(body),
         ...req_config.headers,
       },
-      timeout: 60000,
+      timeout: 180000,
     }, (res) => {
       let data = '';
       res.on('data', c => data += c);
