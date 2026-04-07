@@ -89,12 +89,17 @@ export function saveMention(mention) {
   return insertMention.run(mention);
 }
 
+const updateAuthor = db.prepare(`UPDATE mentions SET author = @author WHERE id = @id AND (author = 'Unknown' OR author NOT LIKE '%|||%')`);
+
 export function saveMentions(mentions) {
   const tx = db.transaction((items) => {
     let newCount = 0;
     for (const m of items) {
       const result = insertMention.run(m);
       if (result.changes > 0) newCount++;
+      else if (m.author && m.author !== 'Unknown' && m.author.includes('|||')) {
+        updateAuthor.run({ id: m.id, author: m.author });
+      }
     }
     return newCount;
   });
