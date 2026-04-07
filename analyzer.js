@@ -103,16 +103,22 @@ async function callLLM(config, prompt, systemPrompt) {
  * @param {array} items - mentions to analyze
  * @param {string} reportRole - custom analyst role, e.g. "Unihertz公关策略师"
  */
-export async function analyzeBatch(config, items, reportRole, productInfo) {
+export async function analyzeBatch(config, items, reportRole, productInfo, platform = 'reddit') {
   if (!items.length) return [];
 
-  const itemsText = items.map((item, i) =>
-    `[${i + 1}] (${item.type}) r/${item.subreddit} | u/${item.author}\n${item.title ? 'Title: ' + item.title + '\n' : ''}${item.body || '(no body)'}`
-  ).join('\n---\n');
+  const isFb = platform === 'facebook';
+  const srcName = isFb ? 'Facebook Group' : 'Reddit';
+  const authorPrefix = isFb ? '' : 'u/';
+  const groupPrefix = isFb ? '' : 'r/';
+
+  const itemsText = items.map((item, i) => {
+    const author = (item.author || '').split('|||')[0];
+    return `[${i + 1}] (${item.type}) ${groupPrefix}${item.subreddit} | ${authorPrefix}${author}\n${item.title ? 'Title: ' + item.title + '\n' : ''}${item.body || '(no body)'}`;
+  }).join('\n---\n');
 
   const role = reportRole
-    ? `你是${reportRole}。从${reportRole}的角度分析以下 Reddit 帖子/评论，重点关注与自身品牌相关的舆情、竞对动态和用户需求。`
-    : '你是品牌舆情分析师。分析以下 Reddit 帖子/评论的品牌情感和产品洞察。';
+    ? `你是${reportRole}。从${reportRole}的角度分析以下 ${srcName} 帖子/评论，重点关注与自身品牌相关的舆情、竞对动态和用户需求。`
+    : `你是品牌舆情分析师。分析以下 ${srcName} 帖子/评论的品牌情感和产品洞察。`;
 
   const systemPrompt = `${role}
 
@@ -128,7 +134,7 @@ export async function analyzeBatch(config, items, reportRole, productInfo) {
 摘要务必简洁。聚焦产品相关洞察。所有内容用中文。${productInfo ? '\n\n如果评论提到了具体产品型号，请在摘要中标注对应产品名称。' : ''}`;
 
   const productContext = productInfo ? `\n\n我方产品线信息：\n${productInfo}\n` : '';
-  const prompt = `分析以下 ${items.length} 条 Reddit 帖子/评论：${productContext}\n${itemsText}`;
+  const prompt = `分析以下 ${items.length} 条 ${srcName} 帖子/评论：${productContext}\n${itemsText}`;
 
   try {
     const raw = await callLLM(config, prompt, systemPrompt);
@@ -159,14 +165,20 @@ export async function analyzeBatch(config, items, reportRole, productInfo) {
  * @param {object} stats - daily analysis stats
  */
 export async function generateDailyReport(config, project, stats, productInfo) {
+  const isFb = project._platform === 'facebook';
+  const srcName = isFb ? 'Facebook Group' : 'Reddit';
+
   const role = project.reportRole
-    ? `你是${project.reportRole}。从${project.reportRole}的专业视角撰写每日 Reddit 社媒舆情监控报告。`
-    : '你是品牌舆情分析师，撰写每日 Reddit 社媒舆情监控报告。';
+    ? `你是${project.reportRole}。从${project.reportRole}的专业视角撰写每日 ${srcName} 社媒舆情监控报告。`
+    : `你是品牌舆情分析师，撰写每日 ${srcName} 社媒舆情监控报告。`;
 
   const systemPrompt = `${role}
-要求：全文中文，紧凑实用，Markdown 格式。用表格呈现数据，文字精炼。直接给结论和建议，不要空话套话。不要使用 emoji 符号。在负面反馈部分必须保留原始 Reddit 链接（格式：[查看原帖](URL)），方便直接跳转回复。`;
+要求：全文中文，紧凑实用，Markdown 格式。用表格呈现数据，文字精炼。直接给结论和建议，不要空话套话。不要使用 emoji 符号。在负面反馈部分必须保留原始链接（格式：[查看原帖](URL)），方便直接跳转回复。`;
 
-  const prompt = `为项目「${project.name || project.id}」生成 Reddit 舆情日报。
+  const fmtLink = (permalink) => isFb ? permalink : ('https://reddit.com' + permalink);
+  const fmtAuthor = (author) => { const name = (author || '').split('|||')[0]; return isFb ? name : `u/${name}`; };
+
+  const prompt = `为项目「${project.name || project.id}」生成 ${srcName} 舆情日报。
 
 日期：${new Date().toISOString().slice(0, 10)}
 
@@ -184,16 +196,16 @@ ${stats.topCons.map((c, i) => `${i + 1}. ${c.text}（${c.count} 次提及）`).j
 ${stats.topPros.map((c, i) => `${i + 1}. ${c.text}（${c.count} 次提及）`).join('\n') || '无'}
 
 高相关度评论摘要：
-${stats.samples.map((s, i) => `${i + 1}. [${s.sentiment}] ${s.summary}${s.permalink ? ' → https://reddit.com' + s.permalink : ''}`).join('\n') || '无'}
+${stats.samples.map((s, i) => `${i + 1}. [${s.sentiment}] ${s.summary}${s.permalink ? ' → ' + fmtLink(s.permalink) : ''}`).join('\n') || '无'}
 
 需要关注的负面反馈（附链接）：
-${(stats.negativeItems || []).map((n, i) => `${i + 1}. ${n.summary} (u/${n.author}) → https://reddit.com${n.permalink}`).join('\n') || '无'}
+${(stats.negativeItems || []).map((n, i) => `${i + 1}. ${n.summary} (${fmtAuthor(n.author)}) → ${fmtLink(n.permalink)}`).join('\n') || '无'}
 
 ${productInfo ? `\n我方产品线信息（用于匹配用户讨论的具体产品）：\n${productInfo}\n` : ''}
 请按以下结构撰写报告：
 1. 今日概况（核心指标一览）
 2. 正面反馈亮点${productInfo ? '（标注涉及的具体产品型号）' : ''}
-3. 负面反馈与风险预警（请保留原始 Reddit 链接，方便直接跳转回复）${productInfo ? '（标注涉及的具体产品型号）' : ''}
+3. 负面反馈与风险预警（请保留原始链接，方便直接跳转回复）${productInfo ? '（标注涉及的具体产品型号）' : ''}
 4. 运营建议与行动项
 5. 总结`;
 
@@ -277,14 +289,20 @@ ${productInfo ? `产品线：${productInfo.slice(0, 500)}` : ''}
  * Generate summary report for all accumulated data
  */
 export async function generateSummaryReport(config, project, stats, productInfo) {
+  const isFb = project._platform === 'facebook';
+  const srcName = isFb ? 'Facebook Group' : 'Reddit';
+
   const role = project.reportRole
-    ? `你是${project.reportRole}。从${project.reportRole}的专业视角撰写 Reddit 社媒舆情汇总报告。`
-    : '你是品牌舆情分析师，撰写 Reddit 社媒舆情汇总报告。';
+    ? `你是${project.reportRole}。从${project.reportRole}的专业视角撰写 ${srcName} 社媒舆情汇总报告。`
+    : `你是品牌舆情分析师，撰写 ${srcName} 社媒舆情汇总报告。`;
 
   const systemPrompt = `${role}
-要求：全文中文，系统性总结，Markdown 格式。用表格呈现数据，文字精炼有洞察。给出战略级建议，不要空话。不要使用 emoji 符号。在负面反馈部分必须保留原始 Reddit 链接（格式：[查看原帖](URL)），方便直接跳转回复。`;
+要求：全文中文，系统性总结，Markdown 格式。用表格呈现数据，文字精炼有洞察。给出战略级建议，不要空话。不要使用 emoji 符号。在负面反馈部分必须保留原始链接（格式：[查看原帖](URL)），方便直接跳转回复。`;
 
-  const prompt = `为项目「${project.name || project.id}」生成 Reddit 舆情汇总报告。
+  const fmtLink = (permalink) => isFb ? permalink : ('https://reddit.com' + permalink);
+  const fmtAuthor = (author) => { const name = (author || '').split('|||')[0]; return isFb ? name : `u/${name}`; };
+
+  const prompt = `为项目「${project.name || project.id}」生成 ${srcName} 舆情汇总报告。
 
 累计数据概览：
 - 总提及：${stats.total}
@@ -299,13 +317,13 @@ ${stats.topCons.map((c, i) => `${i + 1}. ${c.text}（${c.count} 次）`).join('\
 ${stats.topPros.map((c, i) => `${i + 1}. ${c.text}（${c.count} 次）`).join('\n') || '无'}
 
 高相关度评论摘要：
-${stats.samples.map((s, i) => `${i + 1}. [${s.sentiment}] ${s.summary}${s.permalink ? ' → https://reddit.com' + s.permalink : ''}`).join('\n') || '无'}
+${stats.samples.map((s, i) => `${i + 1}. [${s.sentiment}] ${s.summary}${s.permalink ? ' → ' + fmtLink(s.permalink) : ''}`).join('\n') || '无'}
 
 需要关注的负面反馈（附链接）：
-${(stats.negativeItems || []).map((n, i) => `${i + 1}. ${n.summary} (u/${n.author}) → https://reddit.com${n.permalink}`).join('\n') || '无'}
+${(stats.negativeItems || []).map((n, i) => `${i + 1}. ${n.summary} (${fmtAuthor(n.author)}) → ${fmtLink(n.permalink)}`).join('\n') || '无'}
 
 ${productInfo ? `\n我方产品线信息：\n${productInfo}\n` : ''}
-请按以下结构撰写汇总报告（在负面反馈部分请保留 Reddit 原始链接，方便直接跳转回复）：
+请按以下结构撰写汇总报告（在负面反馈部分请保留原始链接，方便直接跳转回复）：
 1. 整体舆情画像（数据总览 + 情感趋势判断）
 2. 品牌口碑核心优势${productInfo ? '（按产品型号分类）' : ''}
 3. 核心风险与高频痛点（按严重程度排序）${productInfo ? '（标注涉及的具体产品型号）' : ''}

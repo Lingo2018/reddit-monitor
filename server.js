@@ -374,8 +374,10 @@ app.post('/api/reports/regenerate', auth, async (req, res) => {
     const cfg = loadConfig();
     if (!cfg.ai?.apiKey) return res.status(400).json({ error: 'AI not configured' });
 
+    const isFbProj = (cfg.facebookProjects || []).some(p => p.id === project);
     const proj = [...(cfg.projects || []), ...(cfg.facebookProjects || [])].find(p => p.id === project);
     if (!proj) return res.status(404).json({ error: 'project not found' });
+    proj._platform = isFbProj ? 'facebook' : 'reddit';
 
     const isSummary = date.startsWith('summary');
 
@@ -562,8 +564,10 @@ app.post('/api/reports/summary', auth, async (req, res) => {
     const cfg = loadConfig();
     if (!cfg.ai?.apiKey) return res.status(400).json({ error: 'AI not configured' });
 
+    const isFbProject = (cfg.facebookProjects || []).some(p => p.id === project);
     const proj = [...(cfg.projects || []), ...(cfg.facebookProjects || [])].find(p => p.id === project);
     if (!proj) return res.status(404).json({ error: 'project not found' });
+    proj._platform = isFbProject ? 'facebook' : 'reddit';
 
     const { getAllAnalysisStats, saveDailyReport, getProductsForPrompt } = await import('./db.js');
     const { generateSummaryReport } = await import('./analyzer.js');

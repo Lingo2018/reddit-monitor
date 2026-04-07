@@ -158,8 +158,11 @@ async function runFacebookBrowserProject(project) {
 async function runAnalysis(config) {
   if (!config.ai?.apiKey || !config.ai?.endpoint) return;
 
-  for (const project of [...config.projects, ...config.facebookProjects]) {
-    // Loop through all unanalyzed in batches of 15
+  const allProjectsWithPlatform = [
+    ...config.projects.map(p => ({ ...p, _platform: 'reddit' })),
+    ...config.facebookProjects.map(p => ({ ...p, _platform: 'facebook' })),
+  ];
+  for (const project of allProjectsWithPlatform) {
     let totalAnalyzed = 0;
     while (true) {
       const unanalyzed = getUnanalyzedMentions(project.id, 15);
@@ -167,7 +170,7 @@ async function runAnalysis(config) {
 
       const productInfo = getProductsForPrompt(project.id);
       log(`  [${project.id}] AI 分析 ${unanalyzed.length} 条...${productInfo ? ' (含产品知识库)' : ''}`);
-      const results = await analyzeBatch(config.ai, unanalyzed, project.reportRole, productInfo);
+      const results = await analyzeBatch(config.ai, unanalyzed, project.reportRole, productInfo, project._platform);
       if (results.length) {
         saveAnalysisBatch(results);
         totalAnalyzed += results.length;
@@ -192,7 +195,11 @@ async function checkDailyReport(config) {
 
   if (lastReportDate === yesterday) return;
 
-  for (const project of [...config.projects, ...config.facebookProjects]) {
+  const allProjWithPlatform = [
+    ...config.projects.map(p => ({ ...p, _platform: 'reddit' })),
+    ...config.facebookProjects.map(p => ({ ...p, _platform: 'facebook' })),
+  ];
+  for (const project of allProjWithPlatform) {
     const stats = getDailyAnalysisStats(project.id, yesterday);
     if (stats.total === 0) { log(`  [${project.id}] ${yesterday} 无数据，跳过报告`); continue; }
 
