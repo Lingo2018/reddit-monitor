@@ -365,6 +365,15 @@ app.get('/api/reports/:date', auth, (req, res) => {
   res.json(row);
 });
 
+// --- Update Report Title ---
+app.put('/api/reports/:id/title', auth, (req, res) => {
+  const { title } = req.body;
+  if (title === undefined) return res.status(400).json({ error: 'title required' });
+  db.prepare('UPDATE daily_reports SET title = ? WHERE id = ?').run(title, +req.params.id);
+  invalidateAll();
+  res.json({ ok: true });
+});
+
 // --- Regenerate Report ---
 app.post('/api/reports/regenerate', auth, async (req, res) => {
   const { date, project } = req.body;

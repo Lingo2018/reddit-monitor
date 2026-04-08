@@ -63,7 +63,7 @@ const i18n = {
     noProducts: '暂无产品数据，请上传产品表格或手动添加',
     negativeActions: '负面反馈快速处理', goReply: '去回复',
     noReports: '暂无报告，数据累积后将自动生成每日舆情报告',
-    reportDate: '日期', reportTotal: '总数', reportSentiment: '情感分布',
+    reportDate: '日期', reportTitle: '报告名称', reportTitleHint: '点击编辑名称...', reportTotal: '总数', reportSentiment: '情感分布',
     viewReport: '查看',
     langSwitch: 'EN',
   },
@@ -125,7 +125,7 @@ const i18n = {
     noProducts: 'No products yet. Upload a specs XLSX or add manually.',
     negativeActions: 'Negative Feedback Actions', goReply: 'Reply',
     noReports: 'No reports yet. Daily reports will be auto-generated once data accumulates.',
-    reportDate: 'Date', reportTotal: 'Total', reportSentiment: 'Sentiment',
+    reportDate: 'Date', reportTitle: 'Title', reportTitleHint: 'Click to edit...', reportTotal: 'Total', reportSentiment: 'Sentiment',
     viewReport: 'View',
     langSwitch: '中文',
   }
@@ -679,14 +679,14 @@ async function renderReports() {
         </div>
       </div>
       <table>
-        <thead><tr><th>${t('reportDate')}</th><th>${t('reportTotal')}</th><th>${t('positive')}</th><th>${t('negative')}</th><th>${t('neutral')}</th><th>${t('actionable')}</th><th></th></tr></thead>
+        <thead><tr><th>${t('reportDate')}</th><th>${t('reportTitle')}</th><th>${t('reportTotal')}</th><th>${t('positive')}</th><th>${t('negative')}</th><th>${t('neutral')}</th><th></th></tr></thead>
         <tbody>${reports.map(r => `<tr>
           <td style="white-space:nowrap">${r.report_date}${r.created_at ? '<br><span style="font-size:11px;color:var(--text-muted)">' + fmtTime(r.created_at) + '</span>' : ''}</td>
+          <td><input class="report-title-input" data-rid="${r.id}" value="${esc(r.title || '')}" placeholder="${t('reportTitleHint')}" style="background:transparent;border:1px solid transparent;border-radius:4px;padding:4px 6px;color:var(--text);font-size:13px;width:100%;transition:.2s" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='transparent'"></td>
           <td>${r.total_count}</td>
           <td style="color:var(--green)">${r.positive_count}</td>
           <td style="color:var(--red)">${r.negative_count}</td>
           <td style="color:var(--orange)">${r.neutral_count}</td>
-          <td>${r.actionable_count}</td>
           <td style="white-space:nowrap">
             <a href="#report/${r.report_date}?p=${r.project}" class="btn btn-sm btn-outline">${t('viewReport')}</a>
             <button class="btn btn-sm btn-outline regen-btn" data-date="${r.report_date}" data-project="${r.project}" style="margin-left:4px">${t('regenerateReport')}</button>
@@ -695,6 +695,20 @@ async function renderReports() {
         </tr>`).join('')}</tbody>
       </table>
     </div>`;
+
+  // Auto-save report title on Enter or blur
+  document.querySelectorAll('.report-title-input').forEach(input => {
+    let saved = input.value;
+    const save = async () => {
+      const val = input.value.trim();
+      if (val === saved) return;
+      saved = val;
+      await api(`/reports/${input.dataset.rid}/title`, { method: 'PUT', body: { title: val } }).catch(()=>{});
+      clearClientCache();
+    };
+    input.onblur = save;
+    input.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); input.blur(); } };
+  });
 
   document.querySelectorAll('.regen-btn').forEach(btn => {
     btn.onclick = async () => {

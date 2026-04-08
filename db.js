@@ -268,6 +268,12 @@ export function saveDailyReport(report) {
   return insertReport.run(report);
 }
 
+// 迁移：报告标题
+try {
+  db.exec(`ALTER TABLE daily_reports ADD COLUMN title TEXT DEFAULT ''`);
+  console.log('[db] 迁移完成: 添加报告 title 列');
+} catch {}
+
 // --- Products table ---
 db.exec(`
   CREATE TABLE IF NOT EXISTS products (
