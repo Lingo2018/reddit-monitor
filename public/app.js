@@ -1698,8 +1698,9 @@ function fmtUtc(ts) {
 }
 
 function defaultReportTitle(r) {
-  if (r.report_date.startsWith('summary')) return `${r.project} 汇总报告`;
-  return `${r.project} ${r.report_date} 日报`;
+  const name = projectList.find(p => p.id === r.project)?.name || r.project;
+  if (r.report_date.startsWith('summary')) return `${name} 汇总报告`;
+  return `${name} ${r.report_date} 日报`;
 }
 
 function fmtAge(utc) {
