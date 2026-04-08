@@ -213,21 +213,22 @@ export function getUnanalyzedMentions(project, limit = 20) {
 }
 
 export function getDailyAnalysisStats(project, date) {
-  const dayStart = date + 'T00:00:00.000Z';
-  const dayEnd = date + 'T23:59:59.999Z';
+  // Use created_utc (post time) instead of discovered_at (crawl time)
+  const utcStart = Math.floor(new Date(date + 'T00:00:00.000Z').getTime() / 1000);
+  const utcEnd = Math.floor(new Date(date + 'T23:59:59.999Z').getTime() / 1000);
 
-  const total = db.prepare(`SELECT COUNT(*) as c FROM mentions m JOIN analysis a ON m.id = a.mention_id AND m.project = a.project WHERE m.project = ? AND m.discovered_at BETWEEN ? AND ?`).get(project, dayStart, dayEnd)?.c || 0;
-  const posts = db.prepare(`SELECT COUNT(*) as c FROM mentions WHERE project = ? AND type = 'post' AND discovered_at BETWEEN ? AND ?`).get(project, dayStart, dayEnd)?.c || 0;
-  const comments = db.prepare(`SELECT COUNT(*) as c FROM mentions WHERE project = ? AND type = 'comment' AND discovered_at BETWEEN ? AND ?`).get(project, dayStart, dayEnd)?.c || 0;
+  const total = db.prepare(`SELECT COUNT(*) as c FROM mentions m JOIN analysis a ON m.id = a.mention_id AND m.project = a.project WHERE m.project = ? AND m.created_utc BETWEEN ? AND ?`).get(project, utcStart, utcEnd)?.c || 0;
+  const posts = db.prepare(`SELECT COUNT(*) as c FROM mentions WHERE project = ? AND type = 'post' AND created_utc BETWEEN ? AND ?`).get(project, utcStart, utcEnd)?.c || 0;
+  const comments = db.prepare(`SELECT COUNT(*) as c FROM mentions WHERE project = ? AND type = 'comment' AND created_utc BETWEEN ? AND ?`).get(project, utcStart, utcEnd)?.c || 0;
 
-  const sentiments = db.prepare(`SELECT a.sentiment, COUNT(*) as c FROM mentions m JOIN analysis a ON m.id = a.mention_id AND m.project = a.project WHERE m.project = ? AND m.discovered_at BETWEEN ? AND ? GROUP BY a.sentiment`).all(project, dayStart, dayEnd);
+  const sentiments = db.prepare(`SELECT a.sentiment, COUNT(*) as c FROM mentions m JOIN analysis a ON m.id = a.mention_id AND m.project = a.project WHERE m.project = ? AND m.created_utc BETWEEN ? AND ? GROUP BY a.sentiment`).all(project, utcStart, utcEnd);
   const sMap = {};
   sentiments.forEach(s => sMap[s.sentiment] = s.c);
 
-  const actionable = db.prepare(`SELECT COUNT(*) as c FROM mentions m JOIN analysis a ON m.id = a.mention_id AND m.project = a.project WHERE m.project = ? AND a.actionable = 1 AND m.discovered_at BETWEEN ? AND ?`).get(project, dayStart, dayEnd)?.c || 0;
+  const actionable = db.prepare(`SELECT COUNT(*) as c FROM mentions m JOIN analysis a ON m.id = a.mention_id AND m.project = a.project WHERE m.project = ? AND a.actionable = 1 AND m.created_utc BETWEEN ? AND ?`).get(project, utcStart, utcEnd)?.c || 0;
 
   // Aggregate pros and cons
-  const allAnalysis = db.prepare(`SELECT a.pros, a.cons, a.sentiment, a.summary, a.relevance, m.permalink, m.author, m.type FROM mentions m JOIN analysis a ON m.id = a.mention_id AND m.project = a.project WHERE m.project = ? AND m.discovered_at BETWEEN ? AND ?`).all(project, dayStart, dayEnd);
+  const allAnalysis = db.prepare(`SELECT a.pros, a.cons, a.sentiment, a.summary, a.relevance, m.permalink, m.author, m.type FROM mentions m JOIN analysis a ON m.id = a.mention_id AND m.project = a.project WHERE m.project = ? AND m.created_utc BETWEEN ? AND ?`).all(project, utcStart, utcEnd);
 
   const prosCount = {};
   const consCount = {};

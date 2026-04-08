@@ -76,8 +76,8 @@ const SQL = {
   topSubs: db.prepare('SELECT subreddit, COUNT(*) as count FROM mentions GROUP BY subreddit ORDER BY count DESC LIMIT 10'),
   topSubsByProject: db.prepare('SELECT subreddit, COUNT(*) as count FROM mentions WHERE project = ? GROUP BY subreddit ORDER BY count DESC LIMIT 10'),
   recentPolls: db.prepare('SELECT * FROM poll_log ORDER BY id DESC LIMIT 20'),
-  byDay: db.prepare('SELECT date(discovered_at) as day, COUNT(*) as count FROM mentions WHERE discovered_at >= ? GROUP BY day ORDER BY day'),
-  byDayByProject: db.prepare('SELECT date(discovered_at) as day, COUNT(*) as count FROM mentions WHERE project = ? AND discovered_at >= ? GROUP BY day ORDER BY day'),
+  byDay: db.prepare("SELECT date(created_utc, 'unixepoch') as day, COUNT(*) as count FROM mentions WHERE created_utc >= ? GROUP BY day ORDER BY day"),
+  byDayByProject: db.prepare("SELECT date(created_utc, 'unixepoch') as day, COUNT(*) as count FROM mentions WHERE project = ? AND created_utc >= ? GROUP BY day ORDER BY day"),
 
   // Analysis stats
   sentiments: db.prepare('SELECT sentiment, COUNT(*) as count FROM analysis GROUP BY sentiment'),
