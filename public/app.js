@@ -700,6 +700,11 @@ async function renderReports() {
           <button class="btn btn-primary btn-sm" id="gen-summary">${t('genSummary')}</button>
         </div>
       </div>
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:16px">
+        <span style="font-size:12px;color:var(--text-muted)">${t('genDailyFor')}</span>
+        <input type="date" id="daily-date" value="${new Date(Date.now() - 86400000).toISOString().slice(0, 10)}" style="padding:4px 8px;font-size:12px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:6px;color:var(--text)">
+        <button class="btn btn-outline btn-sm" id="gen-daily">${t('genDaily')}</button>
+      </div>
       <table>
         <thead><tr><th>${t('reportTitle')}</th><th>${t('reportDate')}</th><th>${t('reportTotal')}</th><th>${t('positive')}</th><th>${t('negative')}</th><th>${t('neutral')}</th><th></th></tr></thead>
         <tbody>${reports.map(r => `<tr>
@@ -782,6 +787,22 @@ async function renderReports() {
     } catch (e) { toast(e.message); }
     btn.textContent = t('genSummary');
     btn.disabled = false;
+  };
+
+  $('#gen-daily').onclick = async () => {
+    if (!projectList.length) await loadProjects();
+    const proj = getProjectId();
+    if (!proj || proj === 'default') { toast('请先选择项目'); return; }
+    const date = $('#daily-date').value;
+    if (!date) return;
+    const btn = $('#gen-daily'); btn.disabled = true; btn.innerHTML = '<span class="btn-spinner"></span>' + t('generating');
+    try {
+      const res = await api('/reports/regenerate', { method: 'POST', body: { date, project: proj } });
+      const d = await res.json();
+      if (d.ok) { clearClientCache(); toast(t('reportGenerated')); renderReports(); }
+      else toast(d.error || 'failed');
+    } catch (e) { toast(e.message); }
+    btn.textContent = t('genDaily'); btn.disabled = false;
   };
 
   // Delete report
