@@ -14,26 +14,44 @@ const app = express();
 
 app.use(express.json({ limit: '10mb' }));
 
-// --- Gzip compression ---
+// --- Gzip compression for all responses ---
 app.use((req, res, next) => {
   if (!req.headers['accept-encoding']?.includes('gzip')) return next();
-  const origJson = res.json.bind(res);
-  res.json = (data) => {
-    const body = JSON.stringify(data);
-    if (body.length < 1024) return origJson(data); // skip small responses
-    zlib.gzip(body, (err, buf) => {
-      if (err) return origJson(data);
-      res.setHeader('Content-Encoding', 'gzip');
-      res.setHeader('Content-Type', 'application/json');
-      res.end(buf);
-    });
+
+  // Intercept end() to gzip large responses
+  const origEnd = res.end.bind(res);
+  const origWrite = res.write.bind(res);
+  const chunks = [];
+  let intercepting = false;
+
+  res.write = (chunk) => {
+    if (chunk) chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+    return true;
   };
+
+  res.end = (chunk) => {
+    if (chunk) chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+    const body = Buffer.concat(chunks);
+
+    if (body.length > 512 && !res.getHeader('content-encoding')) {
+      zlib.gzip(body, (err, compressed) => {
+        if (err) { origEnd(body); return; }
+        res.setHeader('Content-Encoding', 'gzip');
+        res.setHeader('Content-Length', compressed.length);
+        res.removeHeader('Transfer-Encoding');
+        origEnd(compressed);
+      });
+    } else {
+      origEnd(body);
+    }
+  };
+
   next();
 });
 
-// Static files - no cache for development, etag for revalidation
+// Static files with short cache
 app.use(express.static(path.join(__dirname, 'public'), {
-  maxAge: 0,
+  maxAge: '10m',
   etag: true,
 }));
 
