@@ -679,10 +679,10 @@ async function renderReports() {
         </div>
       </div>
       <table>
-        <thead><tr><th>${t('reportDate')}</th><th>${t('reportTitle')}</th><th>${t('reportTotal')}</th><th>${t('positive')}</th><th>${t('negative')}</th><th>${t('neutral')}</th><th></th></tr></thead>
+        <thead><tr><th>${t('reportTitle')}</th><th>${t('reportDate')}</th><th>${t('reportTotal')}</th><th>${t('positive')}</th><th>${t('negative')}</th><th>${t('neutral')}</th><th></th></tr></thead>
         <tbody>${reports.map(r => `<tr>
-          <td style="white-space:nowrap">${r.report_date}${r.created_at ? '<br><span style="font-size:11px;color:var(--text-muted)">' + fmtTime(r.created_at) + '</span>' : ''}</td>
-          <td><input class="report-title-input" data-rid="${r.id}" value="${esc(r.title || defaultReportTitle(r))}" style="background:transparent;border:1px solid transparent;border-radius:4px;padding:4px 6px;color:${r.title ? 'var(--text)' : 'var(--text-muted)'};font-size:13px;width:100%;transition:.2s" onfocus="this.style.borderColor='var(--primary)';this.style.color='var(--text)'" onblur="this.style.borderColor='transparent'"></td>
+          <td><input class="report-title-input" data-rid="${r.id}" value="${esc(r.title || defaultReportTitle(r))}" style="background:transparent;border:1px solid transparent;border-radius:4px;padding:4px 6px;color:${r.title ? 'var(--text)' : 'var(--text-muted)'};font-size:13px;width:160px;transition:.2s" onfocus="this.style.borderColor='var(--primary)';this.style.color='var(--text)'" onblur="this.style.borderColor='transparent'"></td>
+          <td style="white-space:nowrap">${r.report_date.replace('summary-', '')}${r.created_at ? '<br><span style="font-size:11px;color:var(--text-muted)">' + fmtTime(r.created_at) + '</span>' : ''}</td>
           <td>${r.total_count}</td>
           <td style="color:var(--green)">${r.positive_count}</td>
           <td style="color:var(--red)">${r.negative_count}</td>
