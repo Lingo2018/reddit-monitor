@@ -639,7 +639,7 @@ async function renderReports() {
     document.querySelectorAll('.sq-btn').forEach(b => { b.onclick = () => {
       document.querySelectorAll('.sq-btn').forEach(x => x.classList.remove('active'));
       b.classList.add('active'); summaryRange = b.dataset.days;
-      if (summaryRange !== 'all' && summaryRange !== 'custom') { $('#summary-start').value = new Date(Date.now() - (+summaryRange) * 86400000).toISOString().slice(0, 10); $('#summary-end').value = new Date().toISOString().slice(0, 10); }
+      if (summaryRange !== 'all' && summaryRange !== 'custom') { $('#summary-start').value = new Date(Date.now() - (+summaryRange - 1) * 86400000).toISOString().slice(0, 10); $('#summary-end').value = new Date().toISOString().slice(0, 10); }
     }; });
     const activateCustom = () => { document.querySelectorAll('.sq-btn').forEach(x => x.classList.toggle('active', x.dataset.days === 'custom')); summaryRange = 'custom'; };
     $('#summary-start').onchange = activateCustom;
@@ -737,7 +737,7 @@ async function renderReports() {
   document.querySelectorAll('.sq-btn').forEach(b => { b.onclick = () => {
     document.querySelectorAll('.sq-btn').forEach(x => x.classList.remove('active'));
     b.classList.add('active'); summaryRange = b.dataset.days;
-    if (summaryRange !== 'all') { $('#summary-start').value = new Date(Date.now() - (+summaryRange) * 86400000).toISOString().slice(0, 10); $('#summary-end').value = new Date().toISOString().slice(0, 10); }
+    if (summaryRange !== 'all') { $('#summary-start').value = new Date(Date.now() - (+summaryRange - 1) * 86400000).toISOString().slice(0, 10); $('#summary-end').value = new Date().toISOString().slice(0, 10); }
   }; });
   const activateCustom = () => { document.querySelectorAll('.sq-btn').forEach(x => x.classList.toggle('active', x.dataset.days === 'custom')); summaryRange = 'custom'; };
   $('#summary-start').onchange = activateCustom;
