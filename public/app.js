@@ -63,6 +63,7 @@ const i18n = {
     noProducts: '暂无产品数据，请上传产品表格或手动添加',
     negativeActions: '负面反馈快速处理', goReply: '去回复',
     noReports: '暂无报告，数据累积后将自动生成每日舆情报告',
+    genDailyFor: '补生成日报：', genDaily: '生成日报',
     reportDate: '日期', reportTitle: '报告名称', reportTitleHint: '点击编辑名称...', reportTotal: '总数', reportSentiment: '情感分布',
     viewReport: '查看',
     langSwitch: 'EN',
@@ -125,6 +126,7 @@ const i18n = {
     noProducts: 'No products yet. Upload a specs XLSX or add manually.',
     negativeActions: 'Negative Feedback Actions', goReply: 'Reply',
     noReports: 'No reports yet. Daily reports will be auto-generated once data accumulates.',
+    genDailyFor: 'Generate daily for:', genDaily: 'Generate',
     reportDate: 'Date', reportTitle: 'Title', reportTitleHint: 'Click to edit...', reportTotal: 'Total', reportSentiment: 'Sentiment',
     viewReport: 'View',
     langSwitch: '中文',
@@ -634,6 +636,11 @@ async function renderReports() {
         <input type="date" id="summary-end" value="${today2}" style="padding:4px 8px;font-size:12px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:6px;color:var(--text)">
         <button class="btn btn-primary btn-sm" id="gen-summary">${t('genSummary')}</button>
       </div>
+      <div style="display:flex;gap:6px;align-items:center;margin-top:10px">
+        <span style="font-size:12px;color:var(--text-muted)">${t('genDailyFor')}</span>
+        <input type="date" id="daily-date" value="${new Date(Date.now() - 86400000).toISOString().slice(0, 10)}" style="padding:4px 8px;font-size:12px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:6px;color:var(--text)">
+        <button class="btn btn-outline btn-sm" id="gen-daily">${t('genDaily')}</button>
+      </div>
     </div>`;
     let summaryRange = '7';
     document.querySelectorAll('.sq-btn').forEach(b => { b.onclick = () => {
@@ -653,6 +660,21 @@ async function renderReports() {
       if (summaryRange !== 'all') { body.startDate = $('#summary-start').value; body.endDate = $('#summary-end').value; }
       try { const res = await api('/reports/summary', { method: 'POST', body }); const d = await res.json(); if (d.ok) { clearClientCache(); toast(t('reportGenerated')); renderReports(); } else toast(d.error || 'failed'); } catch (e) { toast(e.message); }
       btn.textContent = t('genSummary'); btn.disabled = false;
+    };
+    $('#gen-daily').onclick = async () => {
+      if (!projectList.length) await loadProjects();
+      const proj = getProjectId();
+      if (!proj || proj === 'default') { toast('请先选择项目'); return; }
+      const date = $('#daily-date').value;
+      if (!date) return;
+      const btn = $('#gen-daily'); btn.disabled = true; btn.innerHTML = '<span class="btn-spinner"></span>' + t('generating');
+      try {
+        const res = await api('/reports/regenerate', { method: 'POST', body: { date, project: proj } });
+        const d = await res.json();
+        if (d.ok) { clearClientCache(); toast(t('reportGenerated')); renderReports(); }
+        else toast(d.error || 'failed');
+      } catch (e) { toast(e.message); }
+      btn.textContent = t('genDaily'); btn.disabled = false;
     };
     return;
   }
