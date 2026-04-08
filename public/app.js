@@ -247,7 +247,7 @@ function toast(msg) {
 async function route() {
   // Handle report detail via hash
   const hash = location.hash.slice(1);
-  if (hash.startsWith('report/')) { renderReportDetail(hash.slice(7)); return; }
+  if (hash.startsWith('report/')) { currentTab = 'reports'; updateTabs(); renderReportDetail(hash.slice(7)); return; }
 
   try {
     if (currentPlatform === 'settings') { await renderGlobalSettings(); return; }
@@ -710,7 +710,7 @@ async function renderReports() {
           <td style="color:var(--red)">${r.negative_count}</td>
           <td style="color:var(--orange)">${r.neutral_count}</td>
           <td style="white-space:nowrap">
-            <a href="#report/${r.report_date}?p=${r.project}" class="btn btn-sm btn-outline">${t('viewReport')}</a>
+            <a href="#report/${r.report_date}?p=${r.project}" class="btn btn-sm btn-outline" onclick="currentTab='reports'">${t('viewReport')}</a>
             <button class="btn btn-sm btn-outline regen-btn" data-date="${r.report_date}" data-project="${r.project}" style="margin-left:4px">${t('regenerateReport')}</button>
             <button class="btn btn-sm btn-outline del-report-btn" data-id="${r.id}" style="margin-left:4px;color:var(--red)">${t('deleteProject')}</button>
           </td>
@@ -1707,6 +1707,14 @@ function esc(s) {
 // --- Boot ---
 window.addEventListener('hashchange', () => {
   const hash = location.hash.slice(1);
-  if (hash.startsWith('report/')) route();
+  if (hash.startsWith('report/')) {
+    currentTab = 'reports';
+    updateTabs();
+    route();
+  } else if (!hash || hash === '') {
+    // Back from report detail
+    updateTabs();
+    route();
+  }
 });
 init();
