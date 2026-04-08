@@ -682,7 +682,7 @@ async function renderReports() {
         <thead><tr><th>${t('reportDate')}</th><th>${t('reportTitle')}</th><th>${t('reportTotal')}</th><th>${t('positive')}</th><th>${t('negative')}</th><th>${t('neutral')}</th><th></th></tr></thead>
         <tbody>${reports.map(r => `<tr>
           <td style="white-space:nowrap">${r.report_date}${r.created_at ? '<br><span style="font-size:11px;color:var(--text-muted)">' + fmtTime(r.created_at) + '</span>' : ''}</td>
-          <td><input class="report-title-input" data-rid="${r.id}" value="${esc(r.title || '')}" placeholder="${t('reportTitleHint')}" style="background:transparent;border:1px solid transparent;border-radius:4px;padding:4px 6px;color:var(--text);font-size:13px;width:100%;transition:.2s" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='transparent'"></td>
+          <td><input class="report-title-input" data-rid="${r.id}" value="${esc(r.title || defaultReportTitle(r))}" style="background:transparent;border:1px solid transparent;border-radius:4px;padding:4px 6px;color:${r.title ? 'var(--text)' : 'var(--text-muted)'};font-size:13px;width:100%;transition:.2s" onfocus="this.style.borderColor='var(--primary)';this.style.color='var(--text)'" onblur="this.style.borderColor='transparent'"></td>
           <td>${r.total_count}</td>
           <td style="color:var(--green)">${r.positive_count}</td>
           <td style="color:var(--red)">${r.negative_count}</td>
@@ -698,16 +698,21 @@ async function renderReports() {
 
   // Auto-save report title on Enter or blur
   document.querySelectorAll('.report-title-input').forEach(input => {
-    let saved = input.value;
+    const origVal = input.value;
     const save = async () => {
       const val = input.value.trim();
-      if (val === saved) return;
-      saved = val;
+      if (val === origVal) { input.style.color = input.dataset.custom ? 'var(--text)' : 'var(--text-muted)'; return; }
+      input.dataset.custom = '1';
+      input.style.color = 'var(--text)';
       await api(`/reports/${input.dataset.rid}/title`, { method: 'PUT', body: { title: val } }).catch(()=>{});
       clearClientCache();
     };
     input.onblur = save;
     input.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); input.blur(); } };
+    if (input.closest('tr')) {
+      const r = reports.find(x => x.id === +input.dataset.rid);
+      if (r?.title) input.dataset.custom = '1';
+    }
   });
 
   document.querySelectorAll('.regen-btn').forEach(btn => {
@@ -1647,6 +1652,11 @@ function fmtUtc(ts) {
   if (!ts) return '-';
   const d = new Date(ts * 1000);
   return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+function defaultReportTitle(r) {
+  if (r.report_date.startsWith('summary')) return `${r.project} 汇总报告`;
+  return `${r.project} ${r.report_date} 日报`;
 }
 
 function fmtAge(utc) {
