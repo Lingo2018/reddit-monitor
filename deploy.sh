@@ -55,14 +55,39 @@ mkdir -p data logs
 # 确保 facebookProjects 字段存在
 node -e "const fs=require('fs');const c=JSON.parse(fs.readFileSync('config.json','utf8'));if(!c.facebookProjects){c.facebookProjects=[];fs.writeFileSync('config.json',JSON.stringify(c,null,2));console.log('  已添加 facebookProjects');}" 2>/dev/null || true
 
-# 5. 启动服务
+# 6. 启动服务
 echo "[6/6] 启动服务..."
 if $IS_SYSTEMD_USER; then
   systemctl --user start reddit-monitor
   sleep 2
   systemctl --user status reddit-monitor --no-pager | head -5
-elif $IS_ROOT && [ -f /etc/systemd/system/reddit-monitor.service ]; then
-  systemctl start reddit-monitor
+elif $IS_ROOT; then
+  # Auto-create systemd service if not exists
+  if [ ! -f /etc/systemd/system/reddit-monitor.service ]; then
+    NODE_BIN=$(which node)
+    cat > /etc/systemd/system/reddit-monitor.service << EOF
+[Unit]
+Description=Reddit/Facebook Social Monitor
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=$(pwd)
+ExecStart=${NODE_BIN} index.js
+Restart=always
+RestartSec=10
+StandardOutput=append:$(pwd)/logs/out.log
+StandardError=append:$(pwd)/logs/out.log
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl daemon-reload
+    systemctl enable reddit-monitor
+    echo "  systemd service 已创建并启用开机启动"
+  fi
+  systemctl restart reddit-monitor
   sleep 2
   systemctl status reddit-monitor --no-pager | head -5
 else
