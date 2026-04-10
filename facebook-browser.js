@@ -275,12 +275,10 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
       }
     } catch {}
 
-    // Click "View more comments" to expand inline comments (avoid clicking post links)
+    // Close any popup/modal that may have opened
     try {
-      const moreBtns = await page.$$('span:has-text("View more comments")');
-      for (const btn of moreBtns) {
-        try { await btn.click(); await randomDelay(300, 500); } catch {}
-      }
+      const closeBtn = await page.$('[aria-label="Close"]');
+      if (closeBtn) { await closeBtn.click(); await randomDelay(300, 500); }
     } catch {}
   }
 
