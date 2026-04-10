@@ -275,11 +275,6 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
       }
     } catch {}
 
-    // Close any popup/modal that may have opened
-    try {
-      const closeBtn = await page.$('[aria-label="Close"]');
-      if (closeBtn) { await closeBtn.click(); await randomDelay(300, 500); }
-    } catch {}
   }
 
   // Extract posts from DOM — use feed > div as post containers
@@ -564,7 +559,7 @@ export async function scrapeGroup(groupId, groupName, maxScrolls = 20) {
       platform: 'facebook',
     });
 
-    // Add inline comments
+    // Add inline comments (from feed page)
     for (let ci = 0; ci < (post.comments || []).length; ci++) {
       const c = post.comments[ci];
       allMentions.push({
@@ -585,6 +580,135 @@ export async function scrapeGroup(groupId, groupName, maxScrolls = 20) {
         platform: 'facebook',
       });
     }
+  }
+
+  // Phase 2: Open each post's comment modal to get ALL comments
+  log(`  Phase 2: Scraping full comments for ${posts.length} posts...`);
+  for (let pi = 0; pi < posts.length; pi++) {
+    const post = posts[pi];
+    if (!post.permalink) continue;
+
+    try {
+      log(`    [${pi + 1}/${posts.length}] Opening comments...`);
+      await page.goto(post.permalink, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await randomDelay(2000, 3000);
+
+      // Expand all comments: click "View more comments" repeatedly
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const moreBtn = await page.$('span:has-text("View more comments")');
+        if (!moreBtn) break;
+        try { await moreBtn.click(); await randomDelay(1000, 2000); } catch { break; }
+      }
+
+      // Switch to "All comments" if available
+      try {
+        const relevantBtn = await page.$('span:has-text("Most relevant")');
+        if (relevantBtn) {
+          await relevantBtn.click();
+          await randomDelay(500, 800);
+          const allOption = await page.$('div[role="menuitem"]:has-text("All comments")');
+          if (allOption) { await allOption.click(); await randomDelay(1500, 2500); }
+        }
+      } catch {}
+
+      // Scroll to load more comments
+      for (let s = 0; s < 3; s++) {
+        await humanScroll(page, 400 + Math.random() * 400);
+        await randomDelay(800, 1500);
+        // Click more
+        try {
+          const moreBtn = await page.$('span:has-text("View more comments")');
+          if (moreBtn) { await moreBtn.click(); await randomDelay(800, 1200); }
+        } catch {}
+      }
+
+      // Extract all comments from the post page
+      const comments = await page.evaluate(() => {
+        const results = [];
+        const skip = /^(active|online|offline|admin|moderator|member|top contributor)/i;
+        // Comments are in role="article" elements (first one is the post itself)
+        const articles = document.querySelectorAll('[role="article"]');
+        for (let i = 1; i < articles.length; i++) {
+          const el = articles[i];
+          const texts = [...el.querySelectorAll('div[dir="auto"]')]
+            .map(d => d.innerText.trim()).filter(t => t.length > 2);
+          if (!texts.length) continue;
+          const body = texts.join('\n').slice(0, 3000);
+
+          let author = 'Unknown', authorUrl = '';
+          const userLink = el.querySelector('a[href*="/user/"]');
+          if (userLink) {
+            const name = userLink.innerText.trim();
+            if (name && name.length > 1 && name.length < 60 && !skip.test(name)) {
+              author = name;
+              const href = userLink.getAttribute('href') || '';
+              if (href.includes('/user/')) authorUrl = 'https://www.facebook.com' + href.split('?')[0];
+            }
+          }
+          results.push({ body, author, authorUrl });
+        }
+
+        // Fallback: try list items
+        if (results.length === 0) {
+          const items = document.querySelectorAll('ul[role="list"] > li');
+          for (const li of items) {
+            const text = [...li.querySelectorAll('div[dir="auto"]')]
+              .map(d => d.innerText.trim()).filter(t => t.length > 2).join('\n');
+            if (!text) continue;
+            let author = 'Unknown', authorUrl = '';
+            const link = li.querySelector('a[href*="/user/"]');
+            if (link) {
+              const n = link.innerText.trim();
+              if (n && n.length > 1 && n.length < 60 && !skip.test(n)) {
+                author = n;
+                const h = link.getAttribute('href') || '';
+                if (h.includes('/user/')) authorUrl = 'https://www.facebook.com' + h.split('?')[0];
+              }
+            }
+            results.push({ body: text.slice(0, 3000), author, authorUrl });
+          }
+        }
+
+        // Deduplicate
+        const seen = new Set();
+        return results.filter(r => {
+          const key = r.author + ':' + r.body.slice(0, 50);
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+      });
+
+      // Remove inline comments already captured, add new ones
+      const existingIds = new Set(allMentions.filter(m => m.id.startsWith('fb_comment_' + post.postId)).map(m => m.body.slice(0, 50)));
+      const createdUtc = parseTimeText(post.timeText);
+      let addedCount = 0;
+      for (let ci = 0; ci < comments.length; ci++) {
+        const c = comments[ci];
+        if (existingIds.has(c.body.slice(0, 50))) continue;
+        allMentions.push({
+          id: 'fb_comment_' + post.postId + '_full_' + ci,
+          type: 'comment',
+          title: '',
+          body: c.body,
+          author: c.authorUrl ? c.author + '|||' + c.authorUrl : c.author,
+          subreddit: groupName || groupId,
+          permalink: post.permalink,
+          score: 0,
+          num_comments: 0,
+          created_utc: createdUtc,
+          discovered_at: now,
+          source: 'facebook_comment',
+          matched_keywords: '[]',
+          category: 'facebook',
+          platform: 'facebook',
+        });
+        addedCount++;
+      }
+      if (addedCount) log(`      ${addedCount} comments`);
+
+      await randomDelay(2000, 4000);
+    } catch (e) { log(`      Comment error: ${e.message}`); }
   }
 
   log(`Group ${groupName}: ${allMentions.length} total mentions (${posts.length} posts)`);
