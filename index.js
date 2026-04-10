@@ -162,24 +162,48 @@ async function runAnalysis(config) {
     ...config.projects.map(p => ({ ...p, _platform: 'reddit' })),
     ...config.facebookProjects.map(p => ({ ...p, _platform: 'facebook' })),
   ];
+  const PARALLEL = 3; // 并行批次数
+  const BATCH_SIZE = 15;
+
   for (const project of allProjectsWithPlatform) {
     let totalAnalyzed = 0;
+    const productInfo = getProductsForPrompt(project.id);
+
     while (true) {
-      const unanalyzed = getUnanalyzedMentions(project.id, 15);
+      // 取 PARALLEL * BATCH_SIZE 条，分成多个批次并行
+      const unanalyzed = getUnanalyzedMentions(project.id, PARALLEL * BATCH_SIZE);
       if (!unanalyzed.length) break;
 
-      const productInfo = getProductsForPrompt(project.id);
-      log(`  [${project.id}] AI 分析 ${unanalyzed.length} 条...${productInfo ? ' (含产品知识库)' : ''}`);
-      const results = await analyzeBatch(config.ai, unanalyzed, project.reportRole, productInfo, project._platform);
-      if (results.length) {
-        saveAnalysisBatch(results);
-        totalAnalyzed += results.length;
-        const sentiments = results.map(r => r.sentiment);
-        log(`  [${project.id}] 批次完成: ${results.length} 条 (正${sentiments.filter(s => s === 'positive').length}/负${sentiments.filter(s => s === 'negative').length}/中${sentiments.filter(s => s === 'neutral').length})`);
-      } else {
-        log(`  [${project.id}] 分析返回空，跳过`);
-        break;
+      // 分批
+      const batches = [];
+      for (let i = 0; i < unanalyzed.length; i += BATCH_SIZE) {
+        batches.push(unanalyzed.slice(i, i + BATCH_SIZE));
       }
+
+      log(`  [${project.id}] AI 分析 ${unanalyzed.length} 条 (${batches.length} 批并行)...${productInfo ? ' (含产品知识库)' : ''}`);
+
+      // 并行发送
+      const batchResults = await Promise.allSettled(
+        batches.map(batch => analyzeBatch(config.ai, batch, project.reportRole, productInfo, project._platform))
+      );
+
+      let batchTotal = 0;
+      let hasFailure = false;
+      for (const result of batchResults) {
+        if (result.status === 'fulfilled' && result.value.length) {
+          saveAnalysisBatch(result.value);
+          batchTotal += result.value.length;
+        } else if (result.status === 'rejected') {
+          log(`  [${project.id}] 批次失败: ${result.reason?.message || 'unknown'}`);
+          hasFailure = true;
+        }
+      }
+
+      if (batchTotal) {
+        totalAnalyzed += batchTotal;
+        log(`  [${project.id}] 并行完成: ${batchTotal} 条`);
+      }
+      if (!batchTotal || hasFailure) break; // 全部失败或部分失败则停止
     }
     if (totalAnalyzed) log(`  [${project.id}] 本轮共分析 ${totalAnalyzed} 条`);
     else log(`  [${project.id}] 无待分析内容`);
