@@ -595,7 +595,7 @@ export async function scrapeGroup(groupId, groupName, maxScrolls = 20) {
 
       // Expand all comments: click "View more comments" repeatedly
       for (let attempt = 0; attempt < 5; attempt++) {
-        const moreBtn = await page.$('span:has-text("View more comments")');
+        const moreBtn = await page.$('span:has-text("View more comments"), span:has-text("View more answers"), span:has-text("View all"), span:has-text("replies")');
         if (!moreBtn) break;
         try { await moreBtn.click(); await randomDelay(1000, 2000); } catch { break; }
       }
@@ -617,7 +617,7 @@ export async function scrapeGroup(groupId, groupName, maxScrolls = 20) {
         await randomDelay(800, 1500);
         // Click more
         try {
-          const moreBtn = await page.$('span:has-text("View more comments")');
+          const moreBtn = await page.$('span:has-text("View more comments"), span:has-text("View more answers"), span:has-text("View all"), span:has-text("replies")');
           if (moreBtn) { await moreBtn.click(); await randomDelay(800, 1200); }
         } catch {}
       }
