@@ -593,12 +593,8 @@ export async function scrapeGroup(groupId, groupName, maxScrolls = 20) {
       await page.goto(post.permalink, { waitUntil: 'domcontentloaded', timeout: 30000 });
       await randomDelay(2000, 3000);
 
-      // Expand all comments: click "View more comments" repeatedly
-      for (let attempt = 0; attempt < 5; attempt++) {
-        const moreBtn = await page.$('span:has-text("View more comments"), span:has-text("View more answers"), span:has-text("View all"), span:has-text("replies")');
-        if (!moreBtn) break;
-        try { await moreBtn.click(); await randomDelay(1000, 2000); } catch { break; }
-      }
+      // Find the modal/dialog scrollable container
+      const modalSelector = 'div[role="dialog"], div[aria-label*="Post"], div[class*="scroll"]';
 
       // Switch to "All comments" if available
       try {
@@ -611,15 +607,26 @@ export async function scrapeGroup(groupId, groupName, maxScrolls = 20) {
         }
       } catch {}
 
-      // Scroll to load more comments
-      for (let s = 0; s < 3; s++) {
-        await humanScroll(page, 400 + Math.random() * 400);
+      // Scroll inside the modal and expand comments
+      for (let s = 0; s < 8; s++) {
+        // Scroll inside modal by evaluating JS on the dialog element
+        await page.evaluate(() => {
+          const modal = document.querySelector('div[role="dialog"]');
+          if (modal) {
+            // Find the scrollable child inside the modal
+            const scrollable = modal.querySelector('[style*="overflow"]') || modal;
+            scrollable.scrollTop += 600 + Math.random() * 400;
+          } else {
+            window.scrollBy(0, 600 + Math.random() * 400);
+          }
+        });
         await randomDelay(800, 1500);
-        // Click more
-        try {
-          const moreBtn = await page.$('span:has-text("View more comments"), span:has-text("View more answers"), span:has-text("View all"), span:has-text("replies")');
-          if (moreBtn) { await moreBtn.click(); await randomDelay(800, 1200); }
-        } catch {}
+
+        // Click expand buttons
+        const expandBtns = await page.$$('span:has-text("View more comments"), span:has-text("View more answers"), span:has-text("View all"), span:has-text("replies")');
+        for (const btn of expandBtns) {
+          try { await btn.click(); await randomDelay(500, 800); } catch {}
+        }
       }
 
       // Extract all comments from the post page
