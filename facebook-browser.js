@@ -275,11 +275,11 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
       }
     } catch {}
 
-    // Click all "View more comments" / "X comments" to expand comment sections
+    // Click "View more comments" to expand inline comments (avoid clicking post links)
     try {
-      const commentBtns = await page.$$('span:has-text("View more comments"), span:has-text("comments"), span:has-text("View all")');
-      for (const btn of commentBtns) {
-        try { await btn.click(); await randomDelay(200, 400); } catch {}
+      const moreBtns = await page.$$('span:has-text("View more comments")');
+      for (const btn of moreBtns) {
+        try { await btn.click(); await randomDelay(300, 500); } catch {}
       }
     } catch {}
   }
