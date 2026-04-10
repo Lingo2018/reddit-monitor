@@ -274,6 +274,14 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
         try { await btn.click(); await randomDelay(300, 600); } catch {}
       }
     } catch {}
+
+    // Click "View more comments" / comment count links to expand comments
+    try {
+      const commentBtns = await page.$$('span:has-text("comment"), span:has-text("View more comments")');
+      for (const btn of commentBtns.slice(0, 3)) {
+        try { await btn.click(); await randomDelay(300, 600); } catch {}
+      }
+    } catch {}
   }
 
   // Extract posts from DOM — use feed > div as post containers
@@ -390,7 +398,29 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
           if (cm) commentCount = parseInt(cm[1]);
         }
 
-        results.push({ postId, body, author, authorUrl, permalink, timeText, reactions, commentCount });
+        // Extract inline comments visible in the feed
+        const comments = [];
+        const commentEls = item.querySelectorAll('ul[role="list"] > li, div[aria-label*="Comment"]');
+        for (const cel of commentEls) {
+          const cText = [...cel.querySelectorAll('div[dir="auto"]')]
+            .map(d => d.innerText.trim()).filter(t => t.length > 3).join('\n');
+          if (!cText || cText.length < 5) continue;
+          // Skip if same as post body
+          if (cText === body.slice(0, cText.length)) continue;
+          let cAuthor = 'Unknown', cAuthorUrl = '';
+          const cUserLink = cel.querySelector('a[href*="/user/"]');
+          if (cUserLink) {
+            const cn = cUserLink.innerText.trim();
+            if (cn && cn.length > 1 && cn.length < 60) {
+              cAuthor = cn;
+              const ch = cUserLink.getAttribute('href') || '';
+              if (ch.includes('/user/')) cAuthorUrl = 'https://www.facebook.com' + ch.split('?')[0];
+            }
+          }
+          comments.push({ body: cText.slice(0, 3000), author: cAuthor, authorUrl: cAuthorUrl });
+        }
+
+        results.push({ postId, body, author, authorUrl, permalink, timeText, reactions, commentCount, comments });
       } catch {}
     }
 
@@ -403,7 +433,7 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
     });
   });
 
-  log(`  Extracted ${posts.length} posts`);
+  log(`  Extracted ${posts.length} posts, ${posts.reduce((s, p) => s + (p.comments?.length || 0), 0)} inline comments`);
   return posts;
 }
 
@@ -535,6 +565,28 @@ export async function scrapeGroup(groupId, groupName, maxScrolls = 20) {
       category: 'facebook',
       platform: 'facebook',
     });
+
+    // Add inline comments
+    for (let ci = 0; ci < (post.comments || []).length; ci++) {
+      const c = post.comments[ci];
+      allMentions.push({
+        id: 'fb_comment_' + post.postId + '_' + ci,
+        type: 'comment',
+        title: '',
+        body: c.body,
+        author: c.authorUrl ? c.author + '|||' + c.authorUrl : c.author,
+        subreddit: groupName || groupId,
+        permalink: post.permalink || groupUrl,
+        score: 0,
+        num_comments: 0,
+        created_utc: createdUtc,
+        discovered_at: now,
+        source: 'facebook_comment',
+        matched_keywords: '[]',
+        category: 'facebook',
+        platform: 'facebook',
+      });
+    }
   }
 
   log(`Group ${groupName}: ${allMentions.length} total mentions (${posts.length} posts)`);
