@@ -275,11 +275,11 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
       }
     } catch {}
 
-    // Click "View more comments" / comment count links to expand comments
+    // Click all "View more comments" / "X comments" to expand comment sections
     try {
-      const commentBtns = await page.$$('span:has-text("comment"), span:has-text("View more comments")');
-      for (const btn of commentBtns.slice(0, 3)) {
-        try { await btn.click(); await randomDelay(300, 600); } catch {}
+      const commentBtns = await page.$$('span:has-text("View more comments"), span:has-text("comments"), span:has-text("View all")');
+      for (const btn of commentBtns) {
+        try { await btn.click(); await randomDelay(200, 400); } catch {}
       }
     } catch {}
   }
