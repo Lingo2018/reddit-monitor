@@ -831,6 +831,30 @@ app.get('/api/fb-browser/debug-dom', auth, async (req, res) => {
         artSample = { text, links, dirAuto };
       }
 
+      // For each top-level post article, count nested articles (potential comments)
+      // and list/li elements, and sample their text
+      const topArticles = [...document.querySelectorAll('div[role="feed"] [role="article"]')]
+        .filter(a => !a.parentElement?.closest('[role="article"]'))
+        .slice(0, 3);
+      const structure = topArticles.map(a => {
+        const nested = [...a.querySelectorAll('[role="article"]')];
+        const nestedSamples = nested.slice(0, 3).map(n => ({
+          text: n.innerText.slice(0, 150),
+          hasUserLink: !!n.querySelector('a[href*="/user/"]'),
+        }));
+        const ulLi = a.querySelectorAll('ul[role="list"] > li').length;
+        const anyUl = a.querySelectorAll('ul li').length;
+        const ariaComment = a.querySelectorAll('[aria-label*="omment"]').length;
+        return {
+          postText: a.innerText.slice(0, 100),
+          nestedArticleCount: nested.length,
+          nestedSamples,
+          ulRoleListLi: ulLi,
+          anyUlLi: anyUl,
+          ariaCommentEls: ariaComment,
+        };
+      });
+
       return {
         url: location.href,
         hasFeed: !!feed,
@@ -839,6 +863,7 @@ app.get('/api/fb-browser/debug-dom', auth, async (req, res) => {
         feedArticles,
         mainArticles,
         firstArticleSample: artSample,
+        topArticleStructure: structure,
       };
     });
     res.json(stats);
