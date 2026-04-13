@@ -321,7 +321,12 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
 // Extraction function injected into page context (kept separate for reuse)
 const _EXTRACT_POSTS_FN = () => {
     const results = [];
-    const feedItems = document.querySelectorAll('div[role="feed"] > div');
+    // FB now uses div[role="article"] nested in feed. Only take top-level (no article ancestor).
+    const allArticles = [...document.querySelectorAll('div[role="feed"] [role="article"]')];
+    const feedItems = allArticles.filter(a => {
+      const parent = a.parentElement?.closest('[role="article"]');
+      return !parent;
+    });
 
     for (const item of feedItems) {
       try {
