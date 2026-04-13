@@ -635,7 +635,12 @@ async function _scrapeGroupInner(groupId, groupName, maxScrolls) {
     }
   }
 
-  // Phase 2: Open each post's comment modal to get ALL comments
+  // Phase 2 disabled: FB DOM change broke comment modal flow, caused hang.
+  // Return Phase 1 data immediately so it gets saved. Phase 2 to be rewritten separately.
+  log(`  Skipping Phase 2 (disabled). Returning ${allMentions.length} Phase 1 mentions.`);
+  return allMentions;
+
+  // eslint-disable-next-line no-unreachable
   log(`  Phase 2: Scraping full comments for ${posts.length} posts...`);
   let consecutiveFails = 0;
   for (let pi = 0; pi < posts.length; pi++) {
