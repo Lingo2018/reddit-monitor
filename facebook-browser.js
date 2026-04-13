@@ -20,9 +20,15 @@ function randomDelay(min, max) {
   return new Promise(r => setTimeout(r, min + Math.random() * (max - min)));
 }
 
+function assertPage(p) {
+  if (!p) throw new Error('browser page is null (not started or was stopped)');
+  if (p.isClosed?.()) throw new Error('browser page is closed');
+}
+
 async function humanScroll(page, distance) {
+  assertPage(page);
   const delta = distance || 400 + Math.random() * 800;
-  await page.mouse.wheel(0, delta);
+  try { await page.mouse.wheel(0, delta); } catch (e) { throw new Error(`scroll failed: ${e.message}`); }
   await randomDelay(300, 800);
 }
 
@@ -234,7 +240,7 @@ export async function navigateTo(url) {
 
 // --- Scrape Facebook Group posts ---
 export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
-  if (!page) throw new Error('Browser not started');
+  assertPage(page);
 
   log(`Scraping group: ${groupUrl}`);
   await page.goto(groupUrl, { waitUntil: 'domcontentloaded', timeout: 40000 });
@@ -530,7 +536,7 @@ export async function scrapePostComments(postUrl, maxScrolls = 5) {
 
 // --- Full group scrape: posts + comments → mentions format ---
 export async function scrapeGroup(groupId, groupName, maxScrolls = 20) {
-  if (!page) throw new Error('Browser not started');
+  assertPage(page);
 
   // Support both numeric ID and text alias (e.g. "adbuyers")
   const groupUrl = groupId.startsWith('http') ? groupId : `https://www.facebook.com/groups/${groupId}`;
