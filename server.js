@@ -908,6 +908,16 @@ app.get('/api/fb-browser/debug-modal', auth, async (req, res) => {
 
     await new Promise(r => setTimeout(r, 3500));
 
+    // First: inspect what happened after click
+    const postClickState = await pg.evaluate(() => ({
+      url: location.href,
+      hasDialog: !!document.querySelector('div[role="dialog"]'),
+      hasFeed: !!document.querySelector('div[role="feed"]'),
+      feedArticleCount: document.querySelectorAll('div[role="feed"] [role="article"]').length,
+      mainArticleCount: document.querySelectorAll('[role="main"] [role="article"]').length,
+      bodyTextStart: document.body.innerText.slice(0, 200).replace(/\n/g, ' | '),
+    }));
+
     const dialogInfo = await pg.evaluate(() => {
       const modal = document.querySelector('div[role="dialog"]');
       if (!modal) return { hasDialog: false };
@@ -938,7 +948,7 @@ app.get('/api/fb-browser/debug-modal', auth, async (req, res) => {
 
     // Close dialog
     try { await pg.keyboard.press('Escape'); } catch {}
-    res.json({ clickResult, dialog: dialogInfo });
+    res.json({ clickResult, postClickState, dialog: dialogInfo });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
