@@ -256,6 +256,21 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
   await page.goto(groupUrl, { waitUntil: 'domcontentloaded', timeout: 40000 });
   await randomDelay(2000, 4000);
 
+  // Wait until real post content is rendered (not just skeleton shells).
+  // FB renders empty role=article placeholders first, then fills them.
+  try {
+    await page.waitForFunction(() => {
+      const arts = document.querySelectorAll('div[role="feed"] [role="article"]');
+      for (const a of arts) {
+        if (a.innerText && a.innerText.trim().length > 20) return true;
+      }
+      return false;
+    }, { timeout: 20000 });
+    log('  Feed content loaded');
+  } catch {
+    log('  Feed content wait timed out — proceeding anyway');
+  }
+
   // Dismiss any popups/login prompts
   try {
     const closeBtn = await page.$('[aria-label="Close"]');
