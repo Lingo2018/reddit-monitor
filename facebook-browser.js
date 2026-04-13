@@ -297,12 +297,116 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
 
   // Scroll + extract in batches (FB uses virtual scroll, old posts get recycled)
   const postsMap = new Map(); // postId -> post data
+  const processedForModal = new Set(); // postIds whose modal we already opened
   const extractBatch = async () => {
     const batch = await page.evaluate(_EXTRACT_POSTS_FN);
+    let newCount = 0;
     for (const p of batch) {
-      if (!postsMap.has(p.postId)) postsMap.set(p.postId, p);
+      if (!postsMap.has(p.postId)) { postsMap.set(p.postId, p); newCount++; }
     }
-    return batch.length;
+    return { total: batch.length, newCount };
+  };
+
+  // Open a post's comment modal by clicking "View more comments" inside its container,
+  // scroll the dialog to load comments, extract them, then close with Escape.
+  const processPostModal = async (postId) => {
+    try {
+      // Click the "View more comments" button in the post container
+      const clicked = await page.evaluate((pid) => {
+        const feed = document.querySelector('div[role="feed"]');
+        if (!feed) return 'no-feed';
+        // Find container by matching a link with /posts/PID/
+        let container = null;
+        for (const child of feed.children) {
+          const links = child.querySelectorAll('a[href*="/posts/' + pid + '"]');
+          if (links.length) { container = child; break; }
+        }
+        if (!container) return 'no-container';
+        const btn = [...container.querySelectorAll('div[role="button"], span')]
+          .find(b => /View\s+more\s+comments/i.test(b.innerText));
+        if (!btn) return 'no-button';
+        btn.scrollIntoView({ block: 'center', behavior: 'instant' });
+        // Click (may bubble to parent anchor — use dispatchEvent to force)
+        btn.click();
+        return 'clicked';
+      }, postId);
+
+      if (clicked !== 'clicked') return 0;
+
+      // Wait for dialog to appear
+      try {
+        await page.waitForSelector('div[role="dialog"]', { timeout: 5000 });
+      } catch { return 0; }
+      await randomDelay(1500, 2500);
+
+      // Scroll inside dialog and expand sub-replies
+      for (let s = 0; s < 6; s++) {
+        await page.evaluate(() => {
+          const modal = document.querySelector('div[role="dialog"]');
+          if (!modal) return;
+          const scrollable = modal.querySelector('[style*="overflow-y"]') ||
+                             modal.querySelector('[style*="overflow"]') || modal;
+          scrollable.scrollTop += 800;
+          // Click "View more comments" / "View more replies" buttons inside modal
+          const btns = [...modal.querySelectorAll('div[role="button"], span')]
+            .filter(b => /View\s+more\s+(comments|replies)|View\s+previous\s+comments/i.test(b.innerText));
+          for (const b of btns.slice(0, 3)) { try { b.click(); } catch {} }
+        });
+        await randomDelay(800, 1400);
+      }
+
+      // Extract comments from dialog — nested [role="article"] excluding the main post
+      // The first article in the dialog is the post itself; comments follow.
+      const modalComments = await page.evaluate(() => {
+        const modal = document.querySelector('div[role="dialog"]');
+        if (!modal) return [];
+        const articles = [...modal.querySelectorAll('[role="article"]')];
+        const out = [];
+        // Identify which article is the "main post" (has Share button); rest are comments
+        const isPost = (el) => {
+          const btns = [...el.querySelectorAll('div[role="button"]')].map(b => b.innerText.trim());
+          return btns.includes('Share') || btns.includes('Comment');
+        };
+        for (const el of articles) {
+          if (isPost(el)) continue;
+          const texts = [...el.querySelectorAll('div[dir="auto"]')]
+            .map(d => d.innerText.trim()).filter(t => t.length > 1);
+          if (!texts.length) continue;
+          const body = texts.join('\n').slice(0, 3000);
+          let author = 'Unknown', authorUrl = '';
+          const link = el.querySelector('a[href*="/user/"], a[href*="profile.php"]');
+          if (link) {
+            const name = link.innerText.trim();
+            if (name && name.length > 1 && name.length < 60) {
+              author = name;
+              authorUrl = 'https://www.facebook.com' + (link.getAttribute('href') || '').split('?')[0];
+            }
+          }
+          out.push({ body, author, authorUrl });
+        }
+        return out;
+      });
+
+      // Close dialog
+      try { await page.keyboard.press('Escape'); } catch {}
+      await randomDelay(600, 1200);
+
+      // Merge into the post's comments (dedup by first 50 chars of body)
+      const post = postsMap.get(postId);
+      if (post && modalComments.length) {
+        const existing = new Set((post.comments || []).map(c => c.body.slice(0, 50)));
+        for (const mc of modalComments) {
+          if (existing.has(mc.body.slice(0, 50))) continue;
+          post.comments.push(mc);
+          existing.add(mc.body.slice(0, 50));
+        }
+      }
+      return modalComments.length;
+    } catch (e) {
+      // Ensure dialog is closed on error
+      try { await page.keyboard.press('Escape'); } catch {}
+      return 0;
+    }
   };
 
   const EXTRACT_EVERY = 5; // extract every 5 scrolls
@@ -318,15 +422,21 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
       }
     } catch {}
 
-    // NOTE: Do NOT click "View more comments" — in current FB UI it navigates to
-    // post detail page, breaking the group feed scroll. Only inline visible
-    // comments (ul[role="list"] > li) are captured by the extractor.
-
-    // Extract posts periodically to catch them before DOM recycles
+    // Extract posts periodically + open comment modal for new posts with >2 comments
     if ((i + 1) % EXTRACT_EVERY === 0 || i === maxScrolls - 1) {
       try {
-        const batchSize = await extractBatch();
-        log(`  Scroll ${i + 1}/${maxScrolls} | batch:${batchSize} total:${postsMap.size}`);
+        const { total, newCount } = await extractBatch();
+        log(`  Scroll ${i + 1}/${maxScrolls} | batch:${total} new:${newCount} total:${postsMap.size}`);
+
+        // Process modal comments for new posts with "View more comments" button
+        const toProcess = [...postsMap.values()]
+          .filter(p => !processedForModal.has(p.postId) && p.hasMoreCommentsBtn);
+        for (const post of toProcess) {
+          processedForModal.add(post.postId);
+          const added = await processPostModal(post.postId);
+          if (added) log(`    post ${post.postId.slice(-6)}: +${added} comments from modal`);
+          await randomDelay(800, 1500);
+        }
       } catch (e) {
         log(`  Scroll ${i + 1}/${maxScrolls} | extract error: ${e.message}`);
       }
@@ -340,158 +450,129 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
   return posts;
 }
 
-// Extraction function injected into page context (kept separate for reuse)
+// Extract posts: each post is a direct child div of role=feed, containing:
+// - post header/body/buttons at top level
+// - 0-2 nested role=article elements as inline visible comments
 const _EXTRACT_POSTS_FN = () => {
-    const results = [];
-    // FB now uses div[role="article"] nested in feed. Only take top-level (no article ancestor).
-    const allArticles = [...document.querySelectorAll('div[role="feed"] [role="article"]')];
-    const feedItems = allArticles.filter(a => {
-      const parent = a.parentElement?.closest('[role="article"]');
-      return !parent;
-    });
+  const results = [];
+  const feed = document.querySelector('div[role="feed"]');
+  if (!feed) return results;
 
-    for (const item of feedItems) {
-      try {
-        // Get post body: all dir="auto" text blocks
-        const textBlocks = [...item.querySelectorAll('div[dir="auto"]')]
-          .map(d => d.innerText.trim())
-          .filter(t => t.length > 5);
-        if (!textBlocks.length) continue;
-        const body = textBlocks.join('\n').slice(0, 5000);
-        if (body.length < 10) continue;
+  const containers = [...feed.children];
+  for (const item of containers) {
+    try {
+      // Skip empty virtualized slots and non-post items (sort control, etc.)
+      if (!item.innerText || item.innerText.length < 20) continue;
+      if (/^sort group feed/i.test(item.innerText.trim())) continue;
 
-        // Get author: find link with /user/ that has a name
-        let author = 'Unknown';
-        let authorUrl = '';
-        const userLinks = [...item.querySelectorAll('a[href*="/user/"], a[href*="profile.php"]')];
-        for (const a of userLinks) {
-          const name = a.innerText.trim();
-          if (name && name.length > 1 && name.length < 60 && !/^\d+[hmdw]/.test(name) && !/http/.test(name)) {
-            author = name;
-            const href = a.getAttribute('href') || '';
-            // Use the full /groups/xxx/user/xxx link directly
-            if (href.includes('/user/') || href.includes('profile.php')) {
-              authorUrl = 'https://www.facebook.com' + href.split('?')[0];
-            }
-            break;
-          }
+      // Find permalink: an /posts/NNN/ link WITHOUT comment_id (post-level link)
+      const allLinks = [...item.querySelectorAll('a')];
+      let postId = '', permalink = '';
+      for (const a of allLinks) {
+        const href = a.getAttribute('href') || '';
+        if (href.includes('comment_id=')) continue;
+        const m = href.match(/\/groups\/([^/?]+)\/(?:posts|permalink)\/(\d+)/);
+        if (m) {
+          postId = m[2];
+          permalink = 'https://www.facebook.com/groups/' + m[1] + '/posts/' + postId;
+          break;
         }
-        // Fallback: try all links for any with a short name text + user href
-        if (author === 'Unknown') {
-          const allAs = [...item.querySelectorAll('a')];
-          for (const a of allAs) {
-            const href = a.getAttribute('href') || '';
-            if (!href.includes('/user/')) continue;
-            const name = a.innerText.trim();
-            if (name && name.length > 1 && name.length < 60 && !/^\d+[hmdw]/.test(name)) {
-              author = name;
-              authorUrl = 'https://www.facebook.com' + href.split('?')[0];
-              break;
-            }
-          }
-        }
+      }
+      if (!postId) continue; // not a post (or post link missing)
 
-        // Get post link/ID
-        let permalink = '', postId = '';
-        const allLinks = [...item.querySelectorAll('a')];
-        for (const a of allLinks) {
+      // Clone container and strip nested articles (comments) to isolate post content
+      const postOnly = item.cloneNode(true);
+      [...postOnly.querySelectorAll('[role="article"]')].forEach(el => el.remove());
+
+      // Body: dir=auto text blocks in post (minus nested comments)
+      const textBlocks = [...postOnly.querySelectorAll('div[dir="auto"]')]
+        .map(d => d.innerText.trim()).filter(t => t.length > 2);
+      const body = textBlocks.join('\n').slice(0, 5000);
+      if (body.length < 3) continue;
+
+      // Author: first /user/ or profile.php link from post-only clone
+      let author = 'Unknown', authorUrl = '';
+      const userLinks = [...postOnly.querySelectorAll('a[href*="/user/"], a[href*="profile.php"]')];
+      for (const a of userLinks) {
+        const name = a.innerText.trim();
+        if (name && name.length > 1 && name.length < 60 && !/^\d+[hmdw]/.test(name)) {
+          author = name;
           const href = a.getAttribute('href') || '';
-          // Direct post link: /groups/xxx/posts/xxx or /permalink/xxx
-          const directMatch = href.match(/\/groups\/([^/]+)\/(?:posts|permalink)\/(\d+)/);
-          if (directMatch) {
-            postId = directMatch[2];
-            permalink = 'https://www.facebook.com/groups/' + directMatch[1] + '/posts/' + postId;
-            break;
-          }
-          // Photo/media link with gm.xxx = post ID
-          const gmMatch = href.match(/set=gm\.(\d+)/);
-          if (gmMatch && !postId) {
-            postId = gmMatch[1];
-            // Extract group ID from any /groups/xxx/ link
-            const gidMatch = href.match(/\/groups\/(\d+)/);
-            const gid = gidMatch ? gidMatch[1] : '';
-            if (gid) permalink = 'https://www.facebook.com/groups/' + gid + '/posts/' + postId;
-          }
+          authorUrl = 'https://www.facebook.com' + href.split('?')[0];
+          break;
         }
-        // Fallback: look for group ID in URL and use content hash
-        if (!postId) {
-          let hash = 0;
-          for (let i = 0; i < body.length && i < 100; i++) hash = ((hash << 5) - hash + body.charCodeAt(i)) | 0;
-          postId = 'fbg_' + Math.abs(hash).toString(36);
-        }
-        if (!permalink && postId.match(/^\d+$/)) {
-          // Try to get groupId from page URL
-          const gidFromUrl = location.pathname.match(/\/groups\/(\d+)/);
-          if (gidFromUrl) permalink = 'https://www.facebook.com/groups/' + gidFromUrl[1] + '/posts/' + postId;
-        }
+      }
 
-        // Get timestamp from aria-label or short link text
-        let timeText = '';
-        for (const a of allLinks) {
-          const label = a.getAttribute('aria-label') || '';
-          if (/\d{4}/.test(label) || /ago/i.test(label) || /yesterday/i.test(label) || /hours?|minutes?|days?/i.test(label)) {
-            timeText = label; break;
-          }
-          const t = a.innerText.trim();
-          if (/^\d+[hmdw]$/.test(t) || /^\d+\s*(hr|min|hour|day|week)/i.test(t) || /^(yesterday|just now)/i.test(t)) {
-            timeText = t; break;
+      // Timestamp from spans/links text (post-only)
+      let timeText = '';
+      const postSpans = [...postOnly.querySelectorAll('span, a')];
+      for (const s of postSpans) {
+        const t = s.innerText.trim();
+        if (/^\d+[hmdw]$/.test(t) || /^\d+\s*(hr|min|hour|day|week)/i.test(t) ||
+            /^(yesterday|just now)$/i.test(t) || /^(January|February|March|April|May|June|July|August|September|October|November|December)/i.test(t)) {
+          timeText = t;
+          break;
+        }
+      }
+
+      // Reactions & comment count: look for all-number buttons in item (not clone — live buttons)
+      // Pattern: a post shows reaction count button + comment count button near bottom
+      let reactions = 0, commentCount = 0;
+      const numBtns = [...item.querySelectorAll('div[role="button"], span')]
+        .map(b => b.innerText.trim())
+        .filter(t => /^\d+$/.test(t))
+        .map(t => parseInt(t));
+      // Heuristic: first small number = reactions, second = comments (best-effort)
+      if (numBtns.length >= 1) reactions = numBtns[0];
+      if (numBtns.length >= 2) commentCount = numBtns[1];
+      // Also check aria-labels for explicit counts
+      const ariaEls = item.querySelectorAll('[aria-label]');
+      for (const el of ariaEls) {
+        const label = el.getAttribute('aria-label') || '';
+        const rm = label.match(/(\d+)\s*(reaction|like)/i);
+        const cm = label.match(/(\d+)\s*comment/i);
+        if (rm) reactions = parseInt(rm[1]);
+        if (cm) commentCount = parseInt(cm[1]);
+      }
+
+      // Inline visible comments: each nested [role="article"] inside item = 1 comment
+      const comments = [];
+      const commentArticles = [...item.querySelectorAll('[role="article"]')];
+      for (const cel of commentArticles) {
+        const ctexts = [...cel.querySelectorAll('div[dir="auto"]')]
+          .map(d => d.innerText.trim()).filter(t => t.length > 2);
+        const cbody = ctexts.join('\n').slice(0, 3000);
+        if (cbody.length < 2) continue;
+        let cAuthor = 'Unknown', cAuthorUrl = '';
+        const cLink = cel.querySelector('a[href*="/user/"], a[href*="profile.php"]');
+        if (cLink) {
+          const cn = cLink.innerText.trim();
+          if (cn && cn.length > 1 && cn.length < 60) {
+            cAuthor = cn;
+            cAuthorUrl = 'https://www.facebook.com' + (cLink.getAttribute('href') || '').split('?')[0];
           }
         }
-        // Fallback: check all spans for time-like text
-        if (!timeText) {
-          const spans = [...item.querySelectorAll('span')];
-          for (const s of spans) {
-            const t = s.innerText.trim();
-            if (/^\d+[hmdw]$/.test(t) || /^\d+\s*(hr|min|hour|day)/i.test(t) || /^just now$/i.test(t)) {
-              timeText = t; break;
-            }
-          }
-        }
+        comments.push({ body: cbody, author: cAuthor, authorUrl: cAuthorUrl });
+      }
 
-        // Reactions & comments count from aria-labels or text
-        let reactions = 0, commentCount = 0;
-        const ariaEls = item.querySelectorAll('[aria-label]');
-        for (const el of ariaEls) {
-          const label = el.getAttribute('aria-label') || '';
-          const rm = label.match(/(\d+)\s*(reaction|like)/i);
-          const cm = label.match(/(\d+)\s*comment/i);
-          if (rm) reactions = parseInt(rm[1]);
-          if (cm) commentCount = parseInt(cm[1]);
-        }
+      // Detect "View more comments" button — post has more comments beyond the 2 inline
+      const hasMoreCommentsBtn = [...item.querySelectorAll('div[role="button"], span')]
+        .some(b => /View\s+more\s+comments/i.test(b.innerText));
 
-        // Extract inline comments visible in the feed
-        const comments = [];
-        const commentEls = item.querySelectorAll('ul[role="list"] > li, div[aria-label*="Comment"]');
-        for (const cel of commentEls) {
-          const cText = [...cel.querySelectorAll('div[dir="auto"]')]
-            .map(d => d.innerText.trim()).filter(t => t.length > 3).join('\n');
-          if (!cText || cText.length < 5) continue;
-          // Skip if same as post body
-          if (cText === body.slice(0, cText.length)) continue;
-          let cAuthor = 'Unknown', cAuthorUrl = '';
-          const cUserLink = cel.querySelector('a[href*="/user/"]');
-          if (cUserLink) {
-            const cn = cUserLink.innerText.trim();
-            if (cn && cn.length > 1 && cn.length < 60) {
-              cAuthor = cn;
-              const ch = cUserLink.getAttribute('href') || '';
-              if (ch.includes('/user/')) cAuthorUrl = 'https://www.facebook.com' + ch.split('?')[0];
-            }
-          }
-          comments.push({ body: cText.slice(0, 3000), author: cAuthor, authorUrl: cAuthorUrl });
-        }
+      results.push({
+        postId, body, author, authorUrl, permalink, timeText,
+        reactions, commentCount, comments, hasMoreCommentsBtn,
+      });
+    } catch {}
+  }
 
-        results.push({ postId, body, author, authorUrl, permalink, timeText, reactions, commentCount, comments });
-      } catch {}
-    }
-
-    // Deduplicate by postId (within this batch)
-    const seen = new Set();
-    return results.filter(r => {
-      if (seen.has(r.postId)) return false;
-      seen.add(r.postId);
-      return true;
-    });
+  // Dedup by postId
+  const seen = new Set();
+  return results.filter(r => {
+    if (seen.has(r.postId)) return false;
+    seen.add(r.postId);
+    return true;
+  });
 };
 
 // --- Scrape comments from a specific post ---
@@ -657,156 +738,8 @@ async function _scrapeGroupInner(groupId, groupName, maxScrolls) {
     }
   }
 
-  // Phase 2 disabled: FB DOM change broke comment modal flow, caused hang.
-  // Return Phase 1 data immediately so it gets saved. Phase 2 to be rewritten separately.
-  log(`  Skipping Phase 2 (disabled). Returning ${allMentions.length} Phase 1 mentions.`);
-  return allMentions;
-
-  // eslint-disable-next-line no-unreachable
-  log(`  Phase 2: Scraping full comments for ${posts.length} posts...`);
-  let consecutiveFails = 0;
-  for (let pi = 0; pi < posts.length; pi++) {
-    const post = posts[pi];
-    if (!post.permalink) continue;
-
-    try {
-      log(`    [${pi + 1}/${posts.length}] Opening comments...`);
-      await page.goto(post.permalink, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await randomDelay(2000, 3000);
-
-      // Find the modal/dialog scrollable container
-      const modalSelector = 'div[role="dialog"], div[aria-label*="Post"], div[class*="scroll"]';
-
-      // Switch to "All comments" if available
-      try {
-        const relevantBtn = await page.$('span:has-text("Most relevant")');
-        if (relevantBtn) {
-          await relevantBtn.click();
-          await randomDelay(500, 800);
-          const allOption = await page.$('div[role="menuitem"]:has-text("All comments")');
-          if (allOption) { await allOption.click(); await randomDelay(1500, 2500); }
-        }
-      } catch {}
-
-      // Scroll inside the modal and expand comments
-      for (let s = 0; s < 8; s++) {
-        // Scroll inside modal by evaluating JS on the dialog element
-        await page.evaluate(() => {
-          const modal = document.querySelector('div[role="dialog"]');
-          if (modal) {
-            // Find the scrollable child inside the modal
-            const scrollable = modal.querySelector('[style*="overflow"]') || modal;
-            scrollable.scrollTop += 600 + Math.random() * 400;
-          } else {
-            window.scrollBy(0, 600 + Math.random() * 400);
-          }
-        });
-        await randomDelay(800, 1500);
-
-        // Click expand buttons
-        const expandBtns = await page.$$('span:has-text("View more comments"), span:has-text("View more answers"), span:has-text("View all"), span:has-text("replies")');
-        for (const btn of expandBtns) {
-          try { await btn.click(); await randomDelay(500, 800); } catch {}
-        }
-      }
-
-      // Extract all comments from the post page
-      const comments = await page.evaluate(() => {
-        const results = [];
-        const skip = /^(active|online|offline|admin|moderator|member|top contributor)/i;
-        // Comments are in role="article" elements (first one is the post itself)
-        const articles = document.querySelectorAll('[role="article"]');
-        for (let i = 1; i < articles.length; i++) {
-          const el = articles[i];
-          const texts = [...el.querySelectorAll('div[dir="auto"]')]
-            .map(d => d.innerText.trim()).filter(t => t.length > 2);
-          if (!texts.length) continue;
-          const body = texts.join('\n').slice(0, 3000);
-
-          let author = 'Unknown', authorUrl = '';
-          const userLink = el.querySelector('a[href*="/user/"]');
-          if (userLink) {
-            const name = userLink.innerText.trim();
-            if (name && name.length > 1 && name.length < 60 && !skip.test(name)) {
-              author = name;
-              const href = userLink.getAttribute('href') || '';
-              if (href.includes('/user/')) authorUrl = 'https://www.facebook.com' + href.split('?')[0];
-            }
-          }
-          results.push({ body, author, authorUrl });
-        }
-
-        // Fallback: try list items
-        if (results.length === 0) {
-          const items = document.querySelectorAll('ul[role="list"] > li');
-          for (const li of items) {
-            const text = [...li.querySelectorAll('div[dir="auto"]')]
-              .map(d => d.innerText.trim()).filter(t => t.length > 2).join('\n');
-            if (!text) continue;
-            let author = 'Unknown', authorUrl = '';
-            const link = li.querySelector('a[href*="/user/"]');
-            if (link) {
-              const n = link.innerText.trim();
-              if (n && n.length > 1 && n.length < 60 && !skip.test(n)) {
-                author = n;
-                const h = link.getAttribute('href') || '';
-                if (h.includes('/user/')) authorUrl = 'https://www.facebook.com' + h.split('?')[0];
-              }
-            }
-            results.push({ body: text.slice(0, 3000), author, authorUrl });
-          }
-        }
-
-        // Deduplicate
-        const seen = new Set();
-        return results.filter(r => {
-          const key = r.author + ':' + r.body.slice(0, 50);
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        });
-      });
-
-      // Remove inline comments already captured, add new ones
-      const existingIds = new Set(allMentions.filter(m => m.id.startsWith('fb_comment_' + post.postId)).map(m => m.body.slice(0, 50)));
-      const createdUtc = parseTimeText(post.timeText);
-      let addedCount = 0;
-      for (let ci = 0; ci < comments.length; ci++) {
-        const c = comments[ci];
-        if (existingIds.has(c.body.slice(0, 50))) continue;
-        allMentions.push({
-          id: 'fb_comment_' + post.postId + '_full_' + ci,
-          type: 'comment',
-          title: '',
-          body: c.body,
-          author: c.authorUrl ? c.author + '|||' + c.authorUrl : c.author,
-          subreddit: groupName || groupId,
-          permalink: post.permalink,
-          score: 0,
-          num_comments: 0,
-          created_utc: createdUtc,
-          discovered_at: now,
-          source: 'facebook_comment',
-          matched_keywords: '[]',
-          category: 'facebook',
-          platform: 'facebook',
-        });
-        addedCount++;
-      }
-      if (addedCount) log(`      ${addedCount} comments`);
-
-      await randomDelay(2000, 4000);
-      consecutiveFails = 0;
-    } catch (e) {
-      log(`      Comment error: ${e.message}`);
-      consecutiveFails++;
-      if (consecutiveFails >= 3) {
-        log(`      Aborting Phase 2: ${consecutiveFails} consecutive failures`);
-        break;
-      }
-    }
-  }
-
+  // Phase 2 runs inline during Phase 1 scroll (see scrapeGroupPosts: processPostModal).
+  // Modal-expanded comments are already merged into post.comments by the time we get here.
   log(`Group ${groupName}: ${allMentions.length} total mentions (${posts.length} posts)`);
   return allMentions;
 }
