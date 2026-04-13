@@ -451,14 +451,19 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
     await humanScroll(page, 600 + Math.random() * 600);
     await randomDelay(1200, 2200);
 
-    // Extract posts periodically. Modal Phase 2 disabled: click in modal flow is
-    // unreliable (URL pushes to /permalink/ but dialog never mounts during scrape,
-    // even though the same code path works in isolation via /api/fb-browser/debug-modal).
-    // Inline visible comments (top 2 per post via nested [role=article]) are sufficient.
+    // TEMPORARY: Phase 2 re-enabled for diagnostic verification (codex hypothesis 2)
     if ((i + 1) % EXTRACT_EVERY === 0 || i === maxScrolls - 1) {
       try {
         const { total, newCount } = await extractBatch();
         log(`  Scroll ${i + 1}/${maxScrolls} | batch:${total} new:${newCount} total:${postsMap.size}`);
+        const toProcess = [...postsMap.values()]
+          .filter(p => !processedForModal.has(p.postId) && p.hasMoreCommentsBtn);
+        for (const post of toProcess) {
+          processedForModal.add(post.postId);
+          // PAUSE long enough for external debug-modal probe to race in
+          await processPostModal(post.postId);
+          await randomDelay(2000, 3000);
+        }
       } catch (e) {
         log(`  Scroll ${i + 1}/${maxScrolls} | extract error: ${e.message}`);
       }
