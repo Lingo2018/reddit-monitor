@@ -831,27 +831,26 @@ app.get('/api/fb-browser/debug-dom', auth, async (req, res) => {
         artSample = { text, links, dirAuto };
       }
 
-      // For each top-level post article, count nested articles (potential comments)
-      // and list/li elements, and sample their text
+      // Classify each top-level article: post vs comment
       const topArticles = [...document.querySelectorAll('div[role="feed"] [role="article"]')]
         .filter(a => !a.parentElement?.closest('[role="article"]'))
-        .slice(0, 3);
+        .slice(0, 6);
       const structure = topArticles.map(a => {
-        const nested = [...a.querySelectorAll('[role="article"]')];
-        const nestedSamples = nested.slice(0, 3).map(n => ({
-          text: n.innerText.slice(0, 150),
-          hasUserLink: !!n.querySelector('a[href*="/user/"]'),
-        }));
-        const ulLi = a.querySelectorAll('ul[role="list"] > li').length;
-        const anyUl = a.querySelectorAll('ul li').length;
-        const ariaComment = a.querySelectorAll('[aria-label*="omment"]').length;
+        const hasShare = !!a.querySelector('[aria-label*="Share"], div[role="button"]:has-text("Share")') ||
+                         /\bShare\b/.test([...a.querySelectorAll('div[role="button"]')].map(b => b.innerText).join('|'));
+        const hasFollow = !!a.querySelector('div[role="button"]')
+                           && /\bFollow\b/.test([...a.querySelectorAll('div[role="button"]')].map(b => b.innerText).join('|'));
+        const btnTexts = [...a.querySelectorAll('div[role="button"]')].map(b => b.innerText.trim()).filter(t => t && t.length < 30).slice(0, 10);
+        const endsWithLikeReply = /Like\s*Reply/.test(a.innerText.slice(-50));
         return {
-          postText: a.innerText.slice(0, 100),
-          nestedArticleCount: nested.length,
-          nestedSamples,
-          ulRoleListLi: ulLi,
-          anyUlLi: anyUl,
-          ariaCommentEls: ariaComment,
+          textStart: a.innerText.slice(0, 120),
+          textEnd: a.innerText.slice(-50),
+          btnTexts,
+          hasShareInButtons: btnTexts.some(t => t === 'Share'),
+          hasCommentInButtons: btnTexts.some(t => t === 'Comment'),
+          hasFollowInButtons: btnTexts.some(t => t === 'Follow'),
+          endsWithLikeReply,
+          guess: btnTexts.some(t => t === 'Share') ? 'POST' : (endsWithLikeReply ? 'COMMENT' : 'UNKNOWN'),
         };
       });
 
