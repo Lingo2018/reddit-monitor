@@ -340,7 +340,7 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
       await randomDelay(1500, 2500);
 
       // Scroll inside dialog and expand sub-replies
-      for (let s = 0; s < 6; s++) {
+      for (let s = 0; s < 4; s++) {
         await page.evaluate(() => {
           const modal = document.querySelector('div[role="dialog"]');
           if (!modal) return;
@@ -387,9 +387,18 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
         return out;
       });
 
-      // Close dialog
+      // Close dialog — press Esc AND restore URL (FB pushes permalink on modal open)
       try { await page.keyboard.press('Escape'); } catch {}
-      await randomDelay(600, 1200);
+      await randomDelay(400, 700);
+      // If URL got pushed to permalink, restore via history.back to keep feed context
+      try {
+        await page.evaluate(() => {
+          if (/\/permalink\//.test(location.pathname)) {
+            history.back();
+          }
+        });
+      } catch {}
+      await randomDelay(300, 600);
 
       // Merge into the post's comments (dedup by first 50 chars of body)
       const post = postsMap.get(postId);
@@ -412,15 +421,7 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
   const EXTRACT_EVERY = 5; // extract every 5 scrolls
   for (let i = 0; i < maxScrolls; i++) {
     await humanScroll(page, 600 + Math.random() * 600);
-    await randomDelay(1500, 3000);
-
-    // Click "See more" buttons to expand post text
-    try {
-      const seeMoreBtns = await page.$$('div[role="button"]:has-text("See more")');
-      for (const btn of seeMoreBtns.slice(0, 3)) {
-        try { await btn.click(); await randomDelay(300, 600); } catch {}
-      }
-    } catch {}
+    await randomDelay(1200, 2200);
 
     // Extract posts periodically + open comment modal for new posts with >2 comments
     if ((i + 1) % EXTRACT_EVERY === 0 || i === maxScrolls - 1) {
