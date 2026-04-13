@@ -315,13 +315,9 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
       }
     } catch {}
 
-    // Click "View more comments" / "View more replies" buttons in-feed (no page navigation)
-    try {
-      const commentBtns = await page.$$('div[role="button"]:has-text("View more comments"), div[role="button"]:has-text("View more replies"), div[role="button"]:has-text("View previous comments")');
-      for (const btn of commentBtns.slice(0, 5)) {
-        try { await btn.click(); await randomDelay(400, 800); } catch {}
-      }
-    } catch {}
+    // NOTE: Do NOT click "View more comments" — in current FB UI it navigates to
+    // post detail page, breaking the group feed scroll. Only inline visible
+    // comments (ul[role="list"] > li) are captured by the extractor.
 
     // Extract posts periodically to catch them before DOM recycles
     if ((i + 1) % EXTRACT_EVERY === 0 || i === maxScrolls - 1) {
