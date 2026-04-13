@@ -447,8 +447,11 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
   };
 
   const EXTRACT_EVERY = 5; // extract every 5 scrolls
+  const MODAL_REST_EVERY = 10; // rest after this many modal calls
+  const MODAL_REST_MS = 10 * 60 * 1000; // 10 minutes
   let consecutiveModalFails = 0;
   let modalAborted = false;
+  let modalCallCount = 0;
   for (let i = 0; i < maxScrolls; i++) {
     await humanScroll(page, 600 + Math.random() * 600);
     await randomDelay(1200, 2200);
@@ -465,6 +468,7 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
           for (const post of toProcess) {
             processedForModal.add(post.postId);
             const added = await processPostModal(post.postId);
+            modalCallCount++;
             if (added > 0) consecutiveModalFails = 0;
             else consecutiveModalFails++;
             if (consecutiveModalFails >= 3) {
@@ -472,7 +476,14 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
               modalAborted = true;
               break;
             }
-            await randomDelay(800, 1500);
+            // Rest after every N modal calls to avoid triggering FB rate limit
+            if (modalCallCount > 0 && modalCallCount % MODAL_REST_EVERY === 0) {
+              log(`    resting ${MODAL_REST_MS / 60000}min after ${modalCallCount} modal calls...`);
+              await new Promise(r => setTimeout(r, MODAL_REST_MS));
+              log(`    resumed`);
+            } else {
+              await randomDelay(800, 1500);
+            }
           }
         }
       } catch (e) {
