@@ -414,14 +414,15 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
       const modalComments = [...allModalComments.values()];
       log(`      modal ${postId.slice(-6)}: dialog articles=${lastArticleCount}, extracted comments=${modalComments.length}`);
 
-      // Close dialog — press Esc AND restore URL (FB pushes permalink on modal open)
+      // Close dialog — press Esc and forcibly reset URL via replaceState
+      // (FB pushes permalink on modal open; back() unreliable with React router)
       try { await page.keyboard.press('Escape'); } catch {}
       await randomDelay(400, 700);
-      // If URL got pushed to permalink, restore via history.back to keep feed context
       try {
         await page.evaluate(() => {
-          if (/\/permalink\//.test(location.pathname)) {
-            history.back();
+          const m = location.pathname.match(/^(\/groups\/[^/]+)/);
+          if (m && /\/permalink\//.test(location.pathname)) {
+            history.replaceState({}, '', m[1] + '/');
           }
         });
       } catch {}
