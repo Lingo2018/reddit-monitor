@@ -451,7 +451,8 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
     await humanScroll(page, 600 + Math.random() * 600);
     await randomDelay(1200, 2200);
 
-    // TEMPORARY: Phase 2 re-enabled for diagnostic verification (codex hypothesis 2)
+    // Phase 2 modal extraction enabled. Requires fresh browser (started by scrapeGroup)
+    // for FB React state to allow modal mount on click.
     if ((i + 1) % EXTRACT_EVERY === 0 || i === maxScrolls - 1) {
       try {
         const { total, newCount } = await extractBatch();
@@ -460,9 +461,8 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
           .filter(p => !processedForModal.has(p.postId) && p.hasMoreCommentsBtn);
         for (const post of toProcess) {
           processedForModal.add(post.postId);
-          // PAUSE long enough for external debug-modal probe to race in
           await processPostModal(post.postId);
-          await randomDelay(2000, 3000);
+          await randomDelay(800, 1500);
         }
       } catch (e) {
         log(`  Scroll ${i + 1}/${maxScrolls} | extract error: ${e.message}`);
@@ -712,6 +712,14 @@ export async function scrapeGroup(groupId, groupName, maxScrolls = 20) {
   assertPage(page);
   scrapeInProgress = true;
   try {
+    // Restart browser before scrape: stale React state accumulates and breaks
+    // modal click flow (dialog never mounts after multiple scrolls). Fresh
+    // browser guarantees modal Phase 2 works. Costs ~10s, worth it.
+    log('Restarting browser for fresh React state...');
+    try { await stopBrowser(true); } catch {}
+    await new Promise(r => setTimeout(r, 1000));
+    await startBrowser();
+    await new Promise(r => setTimeout(r, 2000));
     return await _scrapeGroupInner(groupId, groupName, maxScrolls);
   } finally {
     scrapeInProgress = false;
