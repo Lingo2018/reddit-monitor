@@ -326,17 +326,22 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
           .find(b => /View\s+more\s+comments/i.test(b.innerText));
         if (!btn) return 'no-button';
         btn.scrollIntoView({ block: 'center', behavior: 'instant' });
-        // Click (may bubble to parent anchor — use dispatchEvent to force)
         btn.click();
         return 'clicked';
       }, postId);
 
-      if (clicked !== 'clicked') return 0;
+      if (clicked !== 'clicked') {
+        log(`      modal ${postId.slice(-6)}: click failed (${clicked})`);
+        return 0;
+      }
 
       // Wait for dialog to appear
       try {
         await page.waitForSelector('div[role="dialog"]', { timeout: 5000 });
-      } catch { return 0; }
+      } catch {
+        log(`      modal ${postId.slice(-6)}: dialog didn't appear`);
+        return 0;
+      }
       await randomDelay(1500, 2500);
 
       // Scroll inside dialog and expand sub-replies
@@ -357,9 +362,9 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
 
       // Extract comments from dialog — nested [role="article"] excluding the main post
       // The first article in the dialog is the post itself; comments follow.
-      const modalComments = await page.evaluate(() => {
+      const extractResult = await page.evaluate(() => {
         const modal = document.querySelector('div[role="dialog"]');
-        if (!modal) return [];
+        if (!modal) return { articleCount: 0, comments: [] };
         const articles = [...modal.querySelectorAll('[role="article"]')];
         const out = [];
         // Identify which article is the "main post" (has Share button); rest are comments
@@ -384,8 +389,10 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
           }
           out.push({ body, author, authorUrl });
         }
-        return out;
+        return { articleCount: articles.length, comments: out };
       });
+      const modalComments = extractResult.comments;
+      log(`      modal ${postId.slice(-6)}: dialog articles=${extractResult.articleCount}, extracted comments=${modalComments.length}`);
 
       // Close dialog — press Esc AND restore URL (FB pushes permalink on modal open)
       try { await page.keyboard.press('Escape'); } catch {}
