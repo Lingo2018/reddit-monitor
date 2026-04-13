@@ -101,7 +101,7 @@ async function runFacebookProject(project, fbFetcher) {
 }
 
 // Browser-based Facebook Group scraping (stealth Playwright)
-async function runFacebookBrowserProject(project) {
+async function runFacebookBrowserProject(project, config) {
   const pid = project.id;
   const tasks = [];
   const errors = [];
@@ -291,7 +291,7 @@ async function runPoll() {
       for (const project of config.facebookProjects) {
         if (project.facebookGroups?.length) {
           try {
-            const fbResult = await runFacebookBrowserProject(project);
+            const fbResult = await runFacebookBrowserProject(project, config);
             totalNew += fbResult.newCount;
             allTasks.push(...fbResult.tasks);
             allErrors.push(...fbResult.errors);
