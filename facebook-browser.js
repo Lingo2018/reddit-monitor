@@ -335,37 +335,41 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
         return 0;
       }
 
-      // Wait for dialog to appear
-      try {
-        await page.waitForSelector('div[role="dialog"]', { timeout: 5000 });
-      } catch {
-        log(`      modal ${postId.slice(-6)}: dialog didn't appear`);
+      // Wait for modal to appear — detect by URL change to /permalink/ OR dialog element
+      const opened = await page.waitForFunction(() => {
+        return /\/permalink\//.test(location.pathname) ||
+               !!document.querySelector('div[role="dialog"]');
+      }, { timeout: 6000 }).then(() => true).catch(() => false);
+      if (!opened) {
+        log(`      modal ${postId.slice(-6)}: modal didn't appear`);
         return 0;
       }
       await randomDelay(1500, 2500);
 
-      // Scroll inside dialog and expand sub-replies
+      // Scroll inside modal (dialog OR main content) and expand sub-replies
       for (let s = 0; s < 4; s++) {
         await page.evaluate(() => {
           const modal = document.querySelector('div[role="dialog"]');
-          if (!modal) return;
-          const scrollable = modal.querySelector('[style*="overflow-y"]') ||
-                             modal.querySelector('[style*="overflow"]') || modal;
-          scrollable.scrollTop += 800;
-          // Click "View more comments" / "View more replies" buttons inside modal
-          const btns = [...modal.querySelectorAll('div[role="button"], span')]
+          const scrollRoot = modal ||
+            document.querySelector('[role="main"]') || document.body;
+          const scrollable = scrollRoot.querySelector('[style*="overflow-y"]') ||
+                             scrollRoot.querySelector('[style*="overflow"]') || scrollRoot;
+          if (modal) scrollable.scrollTop += 800;
+          else window.scrollBy(0, 800);
+          // Click "View more comments" / "View more replies" buttons
+          const btns = [...scrollRoot.querySelectorAll('div[role="button"], span')]
             .filter(b => /View\s+more\s+(comments|replies)|View\s+previous\s+comments/i.test(b.innerText));
           for (const b of btns.slice(0, 3)) { try { b.click(); } catch {} }
         });
         await randomDelay(800, 1400);
       }
 
-      // Extract comments from dialog — nested [role="article"] excluding the main post
-      // The first article in the dialog is the post itself; comments follow.
+      // Extract comments — scoped to modal if present, else main content
       const extractResult = await page.evaluate(() => {
         const modal = document.querySelector('div[role="dialog"]');
-        if (!modal) return { articleCount: 0, comments: [] };
-        const articles = [...modal.querySelectorAll('[role="article"]')];
+        const root = modal || document.querySelector('[role="main"]');
+        if (!root) return { articleCount: 0, comments: [] };
+        const articles = [...root.querySelectorAll('[role="article"]')];
         const out = [];
         // Identify which article is the "main post" (has Share button); rest are comments
         const isPost = (el) => {
