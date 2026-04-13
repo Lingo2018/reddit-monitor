@@ -346,38 +346,21 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
       }
       await randomDelay(1500, 2500);
 
-      // Scroll inside modal (dialog OR main content) and expand sub-replies
-      for (let s = 0; s < 4; s++) {
-        await page.evaluate(() => {
-          const modal = document.querySelector('div[role="dialog"]');
-          const scrollRoot = modal ||
-            document.querySelector('[role="main"]') || document.body;
-          const scrollable = scrollRoot.querySelector('[style*="overflow-y"]') ||
-                             scrollRoot.querySelector('[style*="overflow"]') || scrollRoot;
-          if (modal) scrollable.scrollTop += 800;
-          else window.scrollBy(0, 800);
-          // Click "View more comments" / "View more replies" buttons
-          const btns = [...scrollRoot.querySelectorAll('div[role="button"], span')]
-            .filter(b => /View\s+more\s+(comments|replies)|View\s+previous\s+comments/i.test(b.innerText));
-          for (const b of btns.slice(0, 3)) { try { b.click(); } catch {} }
-        });
-        await randomDelay(800, 1400);
-      }
-
-      // Extract comments — scoped to modal if present, else main content
-      const extractResult = await page.evaluate(() => {
+      // Extract comments from modal/dialog. Run multiple passes interleaved with
+      // scrolling/expanding to capture comments as they load. Merge all passes.
+      const extractFn = () => {
         const modal = document.querySelector('div[role="dialog"]');
         const root = modal || document.querySelector('[role="main"]');
         if (!root) return { articleCount: 0, comments: [] };
         const articles = [...root.querySelectorAll('[role="article"]')];
         const out = [];
-        // Identify which article is the "main post" (has Share button); rest are comments
-        const isPost = (el) => {
+        // Comment articles: have Like+Reply but NOT Share (Share = main post)
+        const isComment = (el) => {
           const btns = [...el.querySelectorAll('div[role="button"]')].map(b => b.innerText.trim());
-          return btns.includes('Share') || btns.includes('Comment');
+          return btns.includes('Reply') && !btns.includes('Share');
         };
         for (const el of articles) {
-          if (isPost(el)) continue;
+          if (!isComment(el)) continue;
           const texts = [...el.querySelectorAll('div[dir="auto"]')]
             .map(d => d.innerText.trim()).filter(t => t.length > 1);
           if (!texts.length) continue;
@@ -394,9 +377,42 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
           out.push({ body, author, authorUrl });
         }
         return { articleCount: articles.length, comments: out };
-      });
-      const modalComments = extractResult.comments;
-      log(`      modal ${postId.slice(-6)}: dialog articles=${extractResult.articleCount}, extracted comments=${modalComments.length}`);
+      };
+
+      const allModalComments = new Map(); // body-prefix -> {body, author, authorUrl}
+      const mergePass = (pass) => {
+        for (const c of pass.comments) {
+          const key = c.body.slice(0, 60);
+          if (!allModalComments.has(key)) allModalComments.set(key, c);
+        }
+      };
+
+      // Pass 0: extract immediately after click + URL change (dialog still alive)
+      let firstPass = await page.evaluate(extractFn);
+      mergePass(firstPass);
+      let lastArticleCount = firstPass.articleCount;
+
+      // Then scroll/expand and re-extract a few times
+      for (let s = 0; s < 3; s++) {
+        await page.evaluate(() => {
+          const modal = document.querySelector('div[role="dialog"]');
+          const scrollRoot = modal || document.querySelector('[role="main"]') || document.body;
+          const scrollable = scrollRoot.querySelector('[style*="overflow-y"]') ||
+                             scrollRoot.querySelector('[style*="overflow"]') || scrollRoot;
+          if (modal) scrollable.scrollTop += 800;
+          else window.scrollBy(0, 800);
+          const btns = [...scrollRoot.querySelectorAll('div[role="button"], span')]
+            .filter(b => /View\s+more\s+(comments|replies)|View\s+previous\s+comments/i.test(b.innerText));
+          for (const b of btns.slice(0, 3)) { try { b.click(); } catch {} }
+        });
+        await randomDelay(700, 1100);
+        const pass = await page.evaluate(extractFn);
+        if (pass.articleCount > lastArticleCount) lastArticleCount = pass.articleCount;
+        mergePass(pass);
+      }
+
+      const modalComments = [...allModalComments.values()];
+      log(`      modal ${postId.slice(-6)}: dialog articles=${lastArticleCount}, extracted comments=${modalComments.length}`);
 
       // Close dialog — press Esc AND restore URL (FB pushes permalink on modal open)
       try { await page.keyboard.press('Escape'); } catch {}
