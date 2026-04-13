@@ -447,22 +447,33 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
   };
 
   const EXTRACT_EVERY = 5; // extract every 5 scrolls
+  let consecutiveModalFails = 0;
+  let modalAborted = false;
   for (let i = 0; i < maxScrolls; i++) {
     await humanScroll(page, 600 + Math.random() * 600);
     await randomDelay(1200, 2200);
 
-    // Phase 2 modal extraction enabled. Requires fresh browser (started by scrapeGroup)
-    // for FB React state to allow modal mount on click.
+    // Phase 2 modal: works for first few minutes of fresh FB session, then FB
+    // silently degrades (anti-bot). Track consecutive failures, abort after 3.
     if ((i + 1) % EXTRACT_EVERY === 0 || i === maxScrolls - 1) {
       try {
         const { total, newCount } = await extractBatch();
         log(`  Scroll ${i + 1}/${maxScrolls} | batch:${total} new:${newCount} total:${postsMap.size}`);
-        const toProcess = [...postsMap.values()]
-          .filter(p => !processedForModal.has(p.postId) && p.hasMoreCommentsBtn);
-        for (const post of toProcess) {
-          processedForModal.add(post.postId);
-          await processPostModal(post.postId);
-          await randomDelay(800, 1500);
+        if (!modalAborted) {
+          const toProcess = [...postsMap.values()]
+            .filter(p => !processedForModal.has(p.postId) && p.hasMoreCommentsBtn);
+          for (const post of toProcess) {
+            processedForModal.add(post.postId);
+            const added = await processPostModal(post.postId);
+            if (added > 0) consecutiveModalFails = 0;
+            else consecutiveModalFails++;
+            if (consecutiveModalFails >= 3) {
+              log(`    modal aborted after 3 consecutive failures (FB anti-bot kicked in)`);
+              modalAborted = true;
+              break;
+            }
+            await randomDelay(800, 1500);
+          }
         }
       } catch (e) {
         log(`  Scroll ${i + 1}/${maxScrolls} | extract error: ${e.message}`);
