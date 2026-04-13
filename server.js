@@ -850,6 +850,25 @@ app.get('/api/fb-browser/debug-dom', auth, async (req, res) => {
         };
       });
 
+      // Enumerate all direct children of feed, classify each
+      const feedChildren = feed ? [...feed.children] : [];
+      const childTypes = feedChildren.slice(0, 10).map((c, idx) => {
+        const btnTexts = [...c.querySelectorAll('div[role="button"]')].map(b => b.innerText.trim()).filter(t => t && t.length < 30);
+        const hasShare = btnTexts.includes('Share');
+        const hasComment = btnTexts.includes('Comment');
+        const innerRoleArticles = c.querySelectorAll('[role="article"]').length;
+        const text = c.innerText.slice(0, 100).replace(/\n/g, ' | ');
+        return {
+          idx,
+          tag: c.tagName,
+          role: c.getAttribute('role') || '',
+          innerArticleCount: innerRoleArticles,
+          textSnippet: text,
+          btnTexts: btnTexts.slice(0, 8),
+          isPost: hasShare && hasComment,
+        };
+      });
+
       return {
         url: location.href,
         hasFeed: !!feed,
@@ -859,6 +878,7 @@ app.get('/api/fb-browser/debug-dom', auth, async (req, res) => {
         mainArticles,
         firstArticleSample: artSample,
         topArticleStructure: structure,
+        feedChildTypes: childTypes,
       };
     });
     res.json(stats);
