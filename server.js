@@ -885,6 +885,63 @@ app.get('/api/fb-browser/debug-dom', auth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Debug: click "View more comments" on first post with that button, dump dialog DOM
+app.get('/api/fb-browser/debug-modal', auth, async (req, res) => {
+  const pg = fbBrowser.getPage();
+  if (!pg) return res.status(400).json({ error: 'no page' });
+  try {
+    const clickResult = await pg.evaluate(() => {
+      const feed = document.querySelector('div[role="feed"]');
+      if (!feed) return 'no-feed';
+      for (const child of feed.children) {
+        const btn = [...child.querySelectorAll('div[role="button"], span')]
+          .find(b => /View\s+more\s+comments/i.test(b.innerText));
+        if (btn) {
+          btn.scrollIntoView({ block: 'center' });
+          btn.click();
+          return 'clicked';
+        }
+      }
+      return 'no-button-found';
+    });
+    if (clickResult !== 'clicked') return res.json({ clickResult });
+
+    await new Promise(r => setTimeout(r, 3500));
+
+    const dialogInfo = await pg.evaluate(() => {
+      const modal = document.querySelector('div[role="dialog"]');
+      if (!modal) return { hasDialog: false };
+      const articles = [...modal.querySelectorAll('[role="article"]')];
+      const articleSamples = articles.slice(0, 5).map(a => {
+        const btns = [...a.querySelectorAll('div[role="button"]')].map(b => b.innerText.trim()).filter(t => t && t.length < 30);
+        return {
+          text: a.innerText.slice(0, 200).replace(/\n/g, ' | '),
+          btnTexts: btns.slice(0, 8),
+          hasShare: btns.includes('Share'),
+          hasLikeReply: btns.includes('Like') && btns.includes('Reply'),
+          dirAutoCount: a.querySelectorAll('div[dir="auto"]').length,
+        };
+      });
+      // Also check ul/li structure
+      const ulLiCount = modal.querySelectorAll('ul[role="list"] > li').length;
+      const anyLiCount = modal.querySelectorAll('li').length;
+      return {
+        hasDialog: true,
+        url: location.href,
+        articleCount: articles.length,
+        articleSamples,
+        ulRoleListLi: ulLiCount,
+        anyLi: anyLiCount,
+        modalTextStart: modal.innerText.slice(0, 200).replace(/\n/g, ' | '),
+      };
+    });
+
+    // Close dialog
+    try { await pg.keyboard.press('Escape'); } catch {}
+    res.json({ clickResult, dialog: dialogInfo });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Import/export cookies manually
 app.post('/api/fb-browser/import-cookies', auth, async (req, res) => {
   const { cookies } = req.body;
