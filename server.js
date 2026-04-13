@@ -814,22 +814,32 @@ app.get('/api/fb-browser/debug-dom', auth, async (req, res) => {
   if (!pg) return res.status(400).json({ error: 'no page' });
   try {
     const stats = await pg.evaluate(() => {
-      // Dump first 3 feed items' full link hrefs and all text nodes
-      const feedItems = document.querySelectorAll('div[role="feed"] > div');
-      const results = [];
-      for (let i = 0; i < Math.min(3, feedItems.length); i++) {
-        const item = feedItems[i];
-        const allLinks = [...item.querySelectorAll('a')].map(a => ({
-          href: (a.getAttribute('href') || '').slice(0, 150),
-          text: a.innerText.trim().slice(0, 60),
-          hasStrong: !!a.querySelector('strong'),
-        })).filter(l => l.href && l.href !== '#');
-        const allStrongs = [...item.querySelectorAll('strong')].map(s => s.innerText.trim()).filter(Boolean);
-        const allDirAuto = [...item.querySelectorAll('div[dir="auto"]')].map(d => d.innerText.trim().slice(0, 100)).filter(t => t.length > 5);
-        const allSpans = [...item.querySelectorAll('span')].map(s => s.innerText.trim()).filter(t => /^\d+[hmdw]?$/.test(t) || /ago|hr|min|just now/i.test(t)).slice(0, 3);
-        results.push({ links: allLinks.slice(0, 10), strongs: allStrongs, dirAuto: allDirAuto.slice(0, 3), timeSpans: allSpans });
+      // Probe various selectors
+      const feed = document.querySelector('div[role="feed"]');
+      const feedDirect = document.querySelectorAll('div[role="feed"] > div').length;
+      const articles = document.querySelectorAll('div[role="article"]').length;
+      const feedArticles = document.querySelectorAll('div[role="feed"] [role="article"]').length;
+      const mainArticles = document.querySelectorAll('[role="main"] [role="article"]').length;
+
+      // Sample an article
+      const art = document.querySelector('div[role="article"]');
+      let artSample = null;
+      if (art) {
+        const text = art.innerText.slice(0, 300);
+        const links = [...art.querySelectorAll('a')].slice(0, 5).map(a => a.href.slice(0, 100));
+        const dirAuto = [...art.querySelectorAll('div[dir="auto"]')].map(d => d.innerText.trim().slice(0, 80)).filter(t => t.length > 3).slice(0, 3);
+        artSample = { text, links, dirAuto };
       }
-      return { feedItems: feedItems.length, items: results };
+
+      return {
+        url: location.href,
+        hasFeed: !!feed,
+        feedDirectChildren: feedDirect,
+        roleArticle: articles,
+        feedArticles,
+        mainArticles,
+        firstArticleSample: artSample,
+      };
     });
     res.json(stats);
   } catch (e) { res.status(500).json({ error: e.message }); }
