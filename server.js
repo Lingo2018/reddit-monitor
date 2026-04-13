@@ -836,10 +836,6 @@ app.get('/api/fb-browser/debug-dom', auth, async (req, res) => {
         .filter(a => !a.parentElement?.closest('[role="article"]'))
         .slice(0, 6);
       const structure = topArticles.map(a => {
-        const hasShare = !!a.querySelector('[aria-label*="Share"], div[role="button"]:has-text("Share")') ||
-                         /\bShare\b/.test([...a.querySelectorAll('div[role="button"]')].map(b => b.innerText).join('|'));
-        const hasFollow = !!a.querySelector('div[role="button"]')
-                           && /\bFollow\b/.test([...a.querySelectorAll('div[role="button"]')].map(b => b.innerText).join('|'));
         const btnTexts = [...a.querySelectorAll('div[role="button"]')].map(b => b.innerText.trim()).filter(t => t && t.length < 30).slice(0, 10);
         const endsWithLikeReply = /Like\s*Reply/.test(a.innerText.slice(-50));
         return {
