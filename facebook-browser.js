@@ -465,20 +465,26 @@ const _EXTRACT_POSTS_FN = () => {
       if (!item.innerText || item.innerText.length < 20) continue;
       if (/^sort group feed/i.test(item.innerText.trim())) continue;
 
-      // Find permalink: an /posts/NNN/ link WITHOUT comment_id (post-level link)
+      // Find post ID: prefer /posts/NNN/ links without comment_id, fallback to any
       const allLinks = [...item.querySelectorAll('a')];
-      let postId = '', permalink = '';
+      let postId = '', permalink = '', groupSlug = '';
+      // Pass 1: prefer clean post link
       for (const a of allLinks) {
         const href = a.getAttribute('href') || '';
         if (href.includes('comment_id=')) continue;
         const m = href.match(/\/groups\/([^/?]+)\/(?:posts|permalink)\/(\d+)/);
-        if (m) {
-          postId = m[2];
-          permalink = 'https://www.facebook.com/groups/' + m[1] + '/posts/' + postId;
-          break;
+        if (m) { groupSlug = m[1]; postId = m[2]; break; }
+      }
+      // Pass 2: fallback to any /posts/NNN/ link (may have comment_id)
+      if (!postId) {
+        for (const a of allLinks) {
+          const href = a.getAttribute('href') || '';
+          const m = href.match(/\/groups\/([^/?]+)\/(?:posts|permalink)\/(\d+)/);
+          if (m) { groupSlug = m[1]; postId = m[2]; break; }
         }
       }
-      if (!postId) continue; // not a post (or post link missing)
+      if (!postId) continue; // not a post container
+      permalink = 'https://www.facebook.com/groups/' + groupSlug + '/posts/' + postId;
 
       // Clone container and strip nested articles (comments) to isolate post content
       const postOnly = item.cloneNode(true);
