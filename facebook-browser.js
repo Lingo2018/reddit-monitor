@@ -277,11 +277,20 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
     }
   } catch {}
 
-  // Scroll to load more posts
+  // Scroll + extract in batches (FB uses virtual scroll, old posts get recycled)
+  const postsMap = new Map(); // postId -> post data
+  const extractBatch = async () => {
+    const batch = await page.evaluate(_EXTRACT_POSTS_FN);
+    for (const p of batch) {
+      if (!postsMap.has(p.postId)) postsMap.set(p.postId, p);
+    }
+    return batch.length;
+  };
+
+  const EXTRACT_EVERY = 5; // extract every 5 scrolls
   for (let i = 0; i < maxScrolls; i++) {
     await humanScroll(page, 600 + Math.random() * 600);
     await randomDelay(1500, 3000);
-    log(`  Scroll ${i + 1}/${maxScrolls}`);
 
     // Click "See more" buttons to expand post text
     try {
@@ -291,10 +300,26 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
       }
     } catch {}
 
+    // Extract posts periodically to catch them before DOM recycles
+    if ((i + 1) % EXTRACT_EVERY === 0 || i === maxScrolls - 1) {
+      try {
+        const batchSize = await extractBatch();
+        log(`  Scroll ${i + 1}/${maxScrolls} | batch:${batchSize} total:${postsMap.size}`);
+      } catch (e) {
+        log(`  Scroll ${i + 1}/${maxScrolls} | extract error: ${e.message}`);
+      }
+    } else {
+      log(`  Scroll ${i + 1}/${maxScrolls}`);
+    }
   }
 
-  // Extract posts from DOM — use feed > div as post containers
-  const posts = await page.evaluate(() => {
+  const posts = [...postsMap.values()];
+  log(`  Extracted ${posts.length} unique posts, ${posts.reduce((s, p) => s + (p.comments?.length || 0), 0)} inline comments`);
+  return posts;
+}
+
+// Extraction function injected into page context (kept separate for reuse)
+const _EXTRACT_POSTS_FN = () => {
     const results = [];
     const feedItems = document.querySelectorAll('div[role="feed"] > div');
 
@@ -433,18 +458,14 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
       } catch {}
     }
 
-    // Deduplicate by postId
+    // Deduplicate by postId (within this batch)
     const seen = new Set();
     return results.filter(r => {
       if (seen.has(r.postId)) return false;
       seen.add(r.postId);
       return true;
     });
-  });
-
-  log(`  Extracted ${posts.length} posts, ${posts.reduce((s, p) => s + (p.comments?.length || 0), 0)} inline comments`);
-  return posts;
-}
+};
 
 // --- Scrape comments from a specific post ---
 export async function scrapePostComments(postUrl, maxScrolls = 5) {
