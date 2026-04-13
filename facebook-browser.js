@@ -277,17 +277,20 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
     if (closeBtn) { await closeBtn.click(); await randomDelay(500, 1000); }
   } catch {}
 
-  // Select "Recent activity" sort
+  // Select "New posts" sort — "Recent activity" shows comment cards, not post cards
   try {
-    const sortBtn = await page.$('span:has-text("Most relevant")');
+    const sortBtn = await page.$('span:has-text("Most relevant"), span:has-text("Recent activity")');
     if (sortBtn) {
       await sortBtn.click();
       await randomDelay(800, 1200);
-      const recentOption = await page.$('div[role="menuitem"]:has-text("Recent activity")');
-      if (recentOption) {
-        await recentOption.click();
+      const newPostsOption = await page.$('div[role="menuitem"]:has-text("New posts")');
+      if (newPostsOption) {
+        await newPostsOption.click();
         await randomDelay(2000, 3000);
-        log('  Switched to Recent activity sort');
+        log('  Switched to New posts sort');
+      } else {
+        // Close menu if no match
+        try { await page.keyboard.press('Escape'); } catch {}
       }
     }
   } catch {}
