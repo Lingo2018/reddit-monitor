@@ -107,6 +107,12 @@ async function runFacebookBrowserProject(project) {
   const errors = [];
   let totalNew = 0;
 
+  // Skip if another scrape already running (from previous poll cycle)
+  if (fbBrowser.isScraping && fbBrowser.isScraping()) {
+    log(`  [${pid}] FB 浏览器抓取进行中，跳过本轮`);
+    return { tasks, errors: ['scrape in progress'], newCount: 0, totalItems: 0 };
+  }
+
   const status = fbBrowser.getBrowserStatus();
   if (!status.running) {
     log(`  [${pid}] FB 浏览器未运行，尝试自动启动...`);
@@ -129,7 +135,9 @@ async function runFacebookBrowserProject(project) {
     const groupName = group.name || groupId;
     try {
       log(`  [${pid}] FB Browser Group: ${groupName}`);
-      const mentions = await fbBrowser.scrapeGroup(groupId, groupName, config.fbScrollCount || 20);
+      // Cap scroll count at 50 to prevent runaway scrapes
+      const scrollCount = Math.min(config.fbScrollCount || 20, 50);
+      const mentions = await fbBrowser.scrapeGroup(groupId, groupName, scrollCount);
       tasks.push(`fb_browser:${groupName}`);
 
       if (mentions.length) {

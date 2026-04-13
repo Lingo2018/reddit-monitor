@@ -46,11 +46,17 @@ let context = null;
 let page = null;
 let screenshotInterval = null;
 let lastScreenshot = null; // base64 JPEG
+let scrapeInProgress = false;
+
+export function isScraping() {
+  return scrapeInProgress;
+}
 
 export function getBrowserStatus() {
   return {
     running: !!browser,
     hasPage: !!page,
+    scraping: scrapeInProgress,
     lastScreenshot: lastScreenshot ? Date.now() : null,
   };
 }
@@ -192,8 +198,12 @@ export async function startBrowser() {
 }
 
 // --- Stop browser ---
-export async function stopBrowser() {
+export async function stopBrowser(force = false) {
   if (!browser) return { ok: true, wasRunning: false };
+  if (scrapeInProgress && !force) {
+    log('Skip stop: scrape in progress');
+    return { ok: false, reason: 'scrape in progress' };
+  }
 
   // Save cookies before closing
   try {
@@ -536,6 +546,17 @@ export async function scrapePostComments(postUrl, maxScrolls = 5) {
 
 // --- Full group scrape: posts + comments → mentions format ---
 export async function scrapeGroup(groupId, groupName, maxScrolls = 20) {
+  if (scrapeInProgress) throw new Error('another scrape already in progress');
+  assertPage(page);
+  scrapeInProgress = true;
+  try {
+    return await _scrapeGroupInner(groupId, groupName, maxScrolls);
+  } finally {
+    scrapeInProgress = false;
+  }
+}
+
+async function _scrapeGroupInner(groupId, groupName, maxScrolls) {
   assertPage(page);
 
   // Support both numeric ID and text alias (e.g. "adbuyers")
@@ -590,6 +611,7 @@ export async function scrapeGroup(groupId, groupName, maxScrolls = 20) {
 
   // Phase 2: Open each post's comment modal to get ALL comments
   log(`  Phase 2: Scraping full comments for ${posts.length} posts...`);
+  let consecutiveFails = 0;
   for (let pi = 0; pi < posts.length; pi++) {
     const post = posts[pi];
     if (!post.permalink) continue;
@@ -721,7 +743,15 @@ export async function scrapeGroup(groupId, groupName, maxScrolls = 20) {
       if (addedCount) log(`      ${addedCount} comments`);
 
       await randomDelay(2000, 4000);
-    } catch (e) { log(`      Comment error: ${e.message}`); }
+      consecutiveFails = 0;
+    } catch (e) {
+      log(`      Comment error: ${e.message}`);
+      consecutiveFails++;
+      if (consecutiveFails >= 3) {
+        log(`      Aborting Phase 2: ${consecutiveFails} consecutive failures`);
+        break;
+      }
+    }
   }
 
   log(`Group ${groupName}: ${allMentions.length} total mentions (${posts.length} posts)`);
