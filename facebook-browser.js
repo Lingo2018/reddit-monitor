@@ -374,7 +374,19 @@ export async function scrapeGroupPosts(groupUrl, maxScrolls = 20) {
               authorUrl = 'https://www.facebook.com' + (link.getAttribute('href') || '').split('?')[0];
             }
           }
-          out.push({ body, author, authorUrl });
+          // Time: find anchor with comment_id href containing relative time text
+          let timeText = '';
+          for (const a of el.querySelectorAll('a')) {
+            const href = a.getAttribute('href') || '';
+            if (!/comment_id=/.test(href)) continue;
+            const t = a.innerText.trim();
+            if (/^\d+[smhdwy]$/.test(t) || /^\d+\s*(sec|min|hr|hour|day|week|year)/i.test(t) ||
+                /^(yesterday|just now)$/i.test(t)) {
+              timeText = t;
+              break;
+            }
+          }
+          out.push({ body, author, authorUrl, timeText });
         }
         return { articleCount: articles.length, comments: out };
       };
@@ -607,7 +619,20 @@ const _EXTRACT_POSTS_FN = () => {
             cAuthorUrl = 'https://www.facebook.com' + (cLink.getAttribute('href') || '').split('?')[0];
           }
         }
-        comments.push({ body: cbody, author: cAuthor, authorUrl: cAuthorUrl });
+        // Comment timestamp: find anchor with comment_id in href whose text is relative time
+        let cTimeText = '';
+        const cTimeLinks = [...cel.querySelectorAll('a')];
+        for (const a of cTimeLinks) {
+          const href = a.getAttribute('href') || '';
+          if (!/comment_id=/.test(href)) continue;
+          const t = a.innerText.trim();
+          if (/^\d+[smhdwy]$/.test(t) || /^\d+\s*(sec|min|hr|hour|day|week|year)/i.test(t) ||
+              /^(yesterday|just now)$/i.test(t)) {
+            cTimeText = t;
+            break;
+          }
+        }
+        comments.push({ body: cbody, author: cAuthor, authorUrl: cAuthorUrl, timeText: cTimeText });
       }
 
       // Detect "View more comments" button — post has more comments beyond the 2 inline
@@ -778,9 +803,10 @@ async function _scrapeGroupInner(groupId, groupName, maxScrolls) {
       platform: 'facebook',
     });
 
-    // Add inline comments (from feed page)
+    // Add inline comments (from feed page) — each uses its own timestamp
     for (let ci = 0; ci < (post.comments || []).length; ci++) {
       const c = post.comments[ci];
+      const cCreatedUtc = c.timeText ? parseTimeText(c.timeText) : createdUtc;
       allMentions.push({
         id: 'fb_comment_' + post.postId + '_' + ci,
         type: 'comment',
@@ -791,7 +817,7 @@ async function _scrapeGroupInner(groupId, groupName, maxScrolls) {
         permalink: post.permalink || groupUrl,
         score: 0,
         num_comments: 0,
-        created_utc: createdUtc,
+        created_utc: cCreatedUtc,
         discovered_at: now,
         source: 'facebook_comment',
         matched_keywords: '[]',
