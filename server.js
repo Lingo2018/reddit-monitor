@@ -899,7 +899,7 @@ app.post('/api/fb-browser/backfill-times', auth, async (req, res) => {
   // (i.e. comment.created_utc == post.created_utc — strong signal of estimated time)
   const cutoff = Math.floor(Date.now() / 1000) - daysBack * 86400;
   const candidatePosts = db.prepare(`
-    SELECT p.id AS post_id, p.permalink, p.project, COUNT(c.id) AS est_comment_count
+    SELECT p.id AS post_id, p.permalink, p.project, p.created_utc, COUNT(c.id) AS est_comment_count
     FROM mentions p
     INNER JOIN mentions c
       ON c.platform = 'facebook'
