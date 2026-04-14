@@ -564,7 +564,7 @@ async function renderData() {
           const linkHref = isFb ? (r.permalink || '#') : ('https://reddit.com' + r.permalink);
           const titleText = esc(r.type === 'comment' ? (r.body?.slice(0, 100) || r.title || '-') : (r.title || r.body?.slice(0, 100) || '-'));
           return `<tr data-id="${r.id}" data-idx="${i}" class="data-row">
-          <td style="white-space:nowrap;cursor:help" title="${fmtUtcFull(r.created_utc)}">${fmtRelative(r.created_utc)}</td>
+          <td style="white-space:nowrap;cursor:help" title="${fmtUtcFull(r.created_utc)}">${fmtUtc(r.created_utc)}</td>
           <td style="white-space:nowrap">${r.type === 'post' ? t('post') : t('comment')}</td>
           <td style="white-space:nowrap">${sentimentBadge(r.sentiment)}</td>
           <td style="white-space:nowrap">${authorHtml}</td>

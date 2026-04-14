@@ -891,6 +891,7 @@ app.get('/api/fb-browser/debug-dom', auth, async (req, res) => {
 let fbBackfillRunning = false;
 app.post('/api/fb-browser/backfill-times', auth, async (req, res) => {
   if (fbBackfillRunning) return res.status(409).json({ error: 'backfill already running' });
+  if (fbBrowser.isScraping()) return res.status(409).json({ error: 'scrape in progress, try later' });
   const limit = Math.min(parseInt(req.body?.limit) || 3, 10);
   const daysBack = parseInt(req.body?.daysBack) || 30;
 
@@ -921,8 +922,15 @@ app.post('/api/fb-browser/backfill-times', auth, async (req, res) => {
   (async () => {
     let updated = 0;
     const updateStmt = db.prepare('UPDATE mentions SET created_utc = ? WHERE id = ?');
+    // Normalize for fuzzy body match: lowercase, collapse whitespace, strip punct
+    const norm = (s) => (s || '').toLowerCase().replace(/\s+/g, ' ').replace(/[^\w\s]/g, '').trim();
+
     for (const post of candidatePosts) {
       try {
+        if (fbBrowser.isScraping()) {
+          console.log('[backfill] scrape started, aborting');
+          break;
+        }
         if (!fbBrowser.getPage()) {
           console.log('[backfill] browser not running, aborting');
           break;
@@ -931,25 +939,40 @@ app.post('/api/fb-browser/backfill-times', auth, async (req, res) => {
         const comments = await fbBrowser.scrapePostComments(post.permalink, 3);
         console.log(`[backfill] got ${comments.length} comments with time`);
 
-        // Match DB comments by post permalink + body prefix; update created_utc
+        // Match DB comments by post permalink + fuzzy body/author; update created_utc
         const dbComments = db.prepare(
-          `SELECT id, body, created_utc FROM mentions WHERE permalink = ? AND platform = 'facebook' AND type = 'comment'`
-        ).all(post.permalink);
+          `SELECT id, body, author, created_utc FROM mentions WHERE permalink = ? AND platform = 'facebook' AND type = 'comment' AND created_utc = ?`
+        ).all(post.permalink, post.created_utc);
+        console.log(`[backfill] ${dbComments.length} DB comments estimated for this post`);
 
+        let matched = 0;
         for (const c of comments) {
           if (!c.timeText || !c.body) continue;
           const newUtc = fbBrowser.parseTimeText(c.timeText);
-          // Match by body prefix (first 50 chars)
-          const bodyKey = c.body.slice(0, 50).trim();
+          const scrapedBodyNorm = norm(c.body).slice(0, 40);
+          const scrapedAuthorName = (c.author || '').split('|||')[0].trim();
+
           for (const dbc of dbComments) {
-            if (dbc.created_utc !== post.created_utc) continue; // already fixed
-            if ((dbc.body || '').slice(0, 50).trim() === bodyKey) {
+            if (dbc.__matched) continue;
+            const dbBodyNorm = norm(dbc.body).slice(0, 40);
+            const dbAuthorName = (dbc.author || '').split('|||')[0].trim();
+            // Match on: normalized body prefix (>= 20 chars) OR author+shorter body
+            const bodyHit = scrapedBodyNorm.length >= 20 && dbBodyNorm.length >= 20 &&
+                            (dbBodyNorm.startsWith(scrapedBodyNorm.slice(0, 20)) ||
+                             scrapedBodyNorm.startsWith(dbBodyNorm.slice(0, 20)));
+            const authorHit = scrapedAuthorName && dbAuthorName && scrapedAuthorName === dbAuthorName &&
+                              norm(c.body).slice(0, 10) === norm(dbc.body).slice(0, 10);
+            if (bodyHit || authorHit) {
               updateStmt.run(newUtc, dbc.id);
+              dbc.__matched = true;
+              matched++;
               updated++;
               break;
             }
           }
         }
+        console.log(`[backfill] matched ${matched}/${comments.length} for this post`);
+
         // Long delay between posts to respect FB rate limit
         await new Promise(r => setTimeout(r, 90000 + Math.random() * 30000));
       } catch (e) {
