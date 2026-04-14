@@ -885,6 +885,62 @@ app.get('/api/fb-browser/debug-dom', auth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Debug: inspect comment time elements to find absolute timestamp location
+app.get('/api/fb-browser/debug-comment-time', auth, async (req, res) => {
+  const pg = fbBrowser.getPage();
+  if (!pg) return res.status(400).json({ error: 'no page' });
+  try {
+    const info = await pg.evaluate(() => {
+      // Find first nested role=article (a comment) inside any feed direct child
+      const feed = document.querySelector('div[role="feed"]');
+      if (!feed) return { error: 'no feed' };
+      let comment = null;
+      for (const child of feed.children) {
+        const nested = child.querySelector('[role="article"]');
+        if (nested) { comment = nested; break; }
+      }
+      if (!comment) return { error: 'no comment article found' };
+
+      // Find the time anchor — usually <a href="...?comment_id=..."><span>4d</span></a>
+      const timeAnchors = [...comment.querySelectorAll('a')].filter(a => {
+        const href = a.getAttribute('href') || '';
+        return /comment_id=/.test(href) && /^\d+[hmdw]$|^\d+\s*(hr|min|day|week)|yesterday|just now/i.test(a.innerText.trim());
+      });
+
+      const anchorInfo = timeAnchors.map(a => ({
+        text: a.innerText.trim(),
+        ariaLabel: a.getAttribute('aria-label') || '',
+        title: a.getAttribute('title') || '',
+        dataTooltip: a.getAttribute('data-tooltip-content') || '',
+        dataHoverCardUrl: a.getAttribute('data-hovercard') || '',
+        parentAriaLabel: a.parentElement?.getAttribute('aria-label') || '',
+        innerHTML: a.innerHTML.slice(0, 300),
+        allAttrs: [...a.attributes].map(x => x.name + '=' + x.value.slice(0, 80)),
+      }));
+
+      // Also scan all elements with aria-label containing year/month patterns
+      const dateEls = [...comment.querySelectorAll('[aria-label]')]
+        .filter(el => {
+          const label = el.getAttribute('aria-label') || '';
+          return /\d{4}|January|February|March|April|May|June|July|August|September|October|November|December|yesterday/i.test(label);
+        })
+        .slice(0, 5)
+        .map(el => ({
+          tag: el.tagName,
+          ariaLabel: el.getAttribute('aria-label') || '',
+          text: el.innerText.slice(0, 60),
+        }));
+
+      return {
+        commentPreview: comment.innerText.slice(0, 150),
+        timeAnchors: anchorInfo,
+        dateEls,
+      };
+    });
+    res.json(info);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Debug: click "View more comments" on first post with that button, dump dialog DOM
 app.get('/api/fb-browser/debug-modal', auth, async (req, res) => {
   const pg = fbBrowser.getPage();
