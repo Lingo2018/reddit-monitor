@@ -1056,7 +1056,9 @@ app.post('/api/fb-browser/fix-authors', auth, async (req, res) => {
 });
 
 app.get('/api/fb-browser/scrape-status', auth, (req, res) => {
-  res.json({ running: fbScrapeRunning, log: fbScrapeLog });
+  // Report running if either manual (UI-triggered) or auto (poll-triggered) scrape is active
+  const running = fbScrapeRunning || fbBrowser.isScraping();
+  res.json({ running, log: fbScrapeLog });
 });
 
 app.post('/api/fb-browser/scrape-all', auth, async (req, res) => {
