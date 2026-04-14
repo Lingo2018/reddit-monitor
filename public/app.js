@@ -564,7 +564,7 @@ async function renderData() {
           const linkHref = isFb ? (r.permalink || '#') : ('https://reddit.com' + r.permalink);
           const titleText = esc(r.type === 'comment' ? (r.body?.slice(0, 100) || r.title || '-') : (r.title || r.body?.slice(0, 100) || '-'));
           return `<tr data-id="${r.id}" data-idx="${i}" class="data-row">
-          <td style="white-space:nowrap" title="${fmtUtcFull(r.created_utc)}">${fmtUtc(r.created_utc)}</td>
+          <td style="white-space:nowrap;cursor:help" title="${fmtUtcFull(r.created_utc)}">${fmtRelative(r.created_utc)}</td>
           <td style="white-space:nowrap">${r.type === 'post' ? t('post') : t('comment')}</td>
           <td style="white-space:nowrap">${sentimentBadge(r.sentiment)}</td>
           <td style="white-space:nowrap">${authorHtml}</td>
@@ -1701,6 +1701,19 @@ function fmtUtcFull(ts) {
   if (!ts) return '';
   const d = new Date(ts * 1000);
   return d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function fmtRelative(ts) {
+  if (!ts) return '-';
+  const diff = Math.floor(Date.now() / 1000) - ts;
+  if (diff < 0) return '刚刚';
+  if (diff < 60) return `${diff}秒前`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}分钟前`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}小时前`;
+  if (diff < 7 * 86400) return `${Math.floor(diff / 86400)}天前`;
+  if (diff < 30 * 86400) return `${Math.floor(diff / (7 * 86400))}周前`;
+  if (diff < 365 * 86400) return `${Math.floor(diff / (30 * 86400))}个月前`;
+  return `${Math.floor(diff / (365 * 86400))}年前`;
 }
 
 function defaultReportTitle(r) {

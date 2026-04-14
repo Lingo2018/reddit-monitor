@@ -885,6 +885,82 @@ app.get('/api/fb-browser/debug-dom', auth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Backfill FB comment created_utc by revisiting post permalinks.
+// Targets comments whose created_utc matches their parent post (inherited/estimated).
+// Rate-limited: max N posts per call, long delays between posts.
+let fbBackfillRunning = false;
+app.post('/api/fb-browser/backfill-times', auth, async (req, res) => {
+  if (fbBackfillRunning) return res.status(409).json({ error: 'backfill already running' });
+  const limit = Math.min(parseInt(req.body?.limit) || 3, 10);
+  const daysBack = parseInt(req.body?.daysBack) || 30;
+
+  // Find posts with FB comments that inherited their timestamp from the post
+  // (i.e. comment.created_utc == post.created_utc — strong signal of estimated time)
+  const cutoff = Math.floor(Date.now() / 1000) - daysBack * 86400;
+  const candidatePosts = db.prepare(`
+    SELECT p.id AS post_id, p.permalink, p.project, COUNT(c.id) AS est_comment_count
+    FROM mentions p
+    INNER JOIN mentions c
+      ON c.platform = 'facebook'
+      AND c.type = 'comment'
+      AND c.permalink = p.permalink
+      AND c.created_utc = p.created_utc
+    WHERE p.platform = 'facebook' AND p.type = 'post' AND p.created_utc > ?
+    GROUP BY p.id
+    HAVING est_comment_count > 0
+    ORDER BY est_comment_count DESC, p.created_utc DESC
+    LIMIT ?
+  `).all(cutoff, limit);
+
+  if (!candidatePosts.length) return res.json({ ok: true, message: 'no posts to backfill', processed: 0 });
+
+  res.json({ ok: true, message: `backfilling ${candidatePosts.length} posts (will take ~${candidatePosts.length * 2}min)`, posts: candidatePosts.length });
+
+  // Background task
+  fbBackfillRunning = true;
+  (async () => {
+    let updated = 0;
+    const updateStmt = db.prepare('UPDATE mentions SET created_utc = ? WHERE id = ?');
+    for (const post of candidatePosts) {
+      try {
+        if (!fbBrowser.getPage()) {
+          console.log('[backfill] browser not running, aborting');
+          break;
+        }
+        console.log(`[backfill] visiting ${post.permalink}`);
+        const comments = await fbBrowser.scrapePostComments(post.permalink, 3);
+        console.log(`[backfill] got ${comments.length} comments with time`);
+
+        // Match DB comments by post permalink + body prefix; update created_utc
+        const dbComments = db.prepare(
+          `SELECT id, body, created_utc FROM mentions WHERE permalink = ? AND platform = 'facebook' AND type = 'comment'`
+        ).all(post.permalink);
+
+        for (const c of comments) {
+          if (!c.timeText || !c.body) continue;
+          const newUtc = fbBrowser.parseTimeText(c.timeText);
+          // Match by body prefix (first 50 chars)
+          const bodyKey = c.body.slice(0, 50).trim();
+          for (const dbc of dbComments) {
+            if (dbc.created_utc !== post.created_utc) continue; // already fixed
+            if ((dbc.body || '').slice(0, 50).trim() === bodyKey) {
+              updateStmt.run(newUtc, dbc.id);
+              updated++;
+              break;
+            }
+          }
+        }
+        // Long delay between posts to respect FB rate limit
+        await new Promise(r => setTimeout(r, 90000 + Math.random() * 30000));
+      } catch (e) {
+        console.log(`[backfill] error on ${post.permalink}: ${e.message}`);
+      }
+    }
+    console.log(`[backfill] done: updated ${updated} comments`);
+    fbBackfillRunning = false;
+  })().catch(e => { console.log(`[backfill] fatal: ${e.message}`); fbBackfillRunning = false; });
+});
+
 // Debug: inspect comment time elements to find absolute timestamp location
 app.get('/api/fb-browser/debug-comment-time', auth, async (req, res) => {
   const pg = fbBrowser.getPage();

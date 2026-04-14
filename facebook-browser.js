@@ -723,7 +723,19 @@ export async function scrapePostComments(postUrl, maxScrolls = 5) {
         }
       }
 
-      results.push({ body, author: cAuthorUrl ? author + '|||' + cAuthorUrl : author });
+      // Extract comment time from anchor with comment_id href
+      let timeText = '';
+      for (const a of item.querySelectorAll('a')) {
+        const href = a.getAttribute('href') || '';
+        if (!/comment_id=/.test(href)) continue;
+        const t = a.innerText.trim();
+        if (/^\d+[smhdwy]$/.test(t) || /^\d+\s*(sec|min|hr|hour|day|week|year)/i.test(t) ||
+            /^(yesterday|just now)$/i.test(t)) {
+          timeText = t;
+          break;
+        }
+      }
+      results.push({ body, author: cAuthorUrl ? author + '|||' + cAuthorUrl : author, timeText });
     }
 
     // If role="article" didn't work, try comment-specific selectors
@@ -735,7 +747,7 @@ export async function scrapePostComments(postUrl, maxScrolls = 5) {
         if (body.length < 3) continue;
         const authorEl = li.querySelector('a[href*="/user/"] strong') || li.querySelector('strong');
         const author = authorEl?.innerText?.trim() || 'Unknown';
-        results.push({ body: body.slice(0, 3000), author });
+        results.push({ body: body.slice(0, 3000), author, timeText: '' });
       }
     }
 
@@ -834,7 +846,7 @@ async function _scrapeGroupInner(groupId, groupName, maxScrolls) {
 }
 
 // --- Parse relative time text to UTC timestamp ---
-function parseTimeText(text) {
+export function parseTimeText(text) {
   if (!text) return Math.floor(Date.now() / 1000);
   const now = Date.now();
 
