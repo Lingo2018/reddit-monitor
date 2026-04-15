@@ -2,6 +2,7 @@ import { loadConfig } from './config.js';
 import { createFetcher, createKookeeyFetcher } from './fetcher.js';
 import { createFacebookFetcher } from './facebook-fetcher.js';
 import * as fbBrowser from './facebook-browser.js';
+import { runBackfill } from './backfill.js';
 import db from './db.js';
 import { saveMentions, logPoll, logCommentRate, getUnanalyzedMentions, saveAnalysisBatch, getDailyAnalysisStats, saveDailyReport, getStaleUsers, saveUsers, getProductsForPrompt } from './db.js';
 import { analyzeBatch, generateDailyReport } from './analyzer.js';
@@ -9,6 +10,7 @@ import app from './server.js';
 
 let roundCount = 0;
 let lastFbScrapeTime = 0;
+let lastBackfillTime = 0;
 let lastReportDate = '';
 
 function log(msg) {
@@ -285,6 +287,7 @@ async function runPoll() {
   }
 
   // Facebook projects — browser-based, respect fbPollIntervalHours
+  let fbScrapeRanThisCycle = false;
   if (config.facebookProjects.length) {
     const fbInterval = (config.fbPollIntervalHours || 6) * 3600000;
     if (Date.now() - lastFbScrapeTime >= fbInterval) {
@@ -299,9 +302,41 @@ async function runPoll() {
         }
       }
       lastFbScrapeTime = Date.now();
+      fbScrapeRanThisCycle = true;
     } else {
       const nextIn = Math.round((fbInterval - (Date.now() - lastFbScrapeTime)) / 60000);
       log(`  FB 浏览器抓取跳过，${nextIn}分钟后执行`);
+    }
+  }
+
+  // FB comment-time backfill — 24h interval, only when FB scrape NOT running this cycle
+  // and at least 15min after last scrape (let FB cool down). Never runs concurrently.
+  if (config.facebookProjects.length && !fbScrapeRanThisCycle) {
+    const backfillInterval = 24 * 3600000;
+    const sinceLastScrape = Date.now() - lastFbScrapeTime;
+    if (Date.now() - lastBackfillTime >= backfillInterval &&
+        sinceLastScrape >= 15 * 60000 &&
+        !fbBrowser.isScraping()) {
+      try {
+        // Need browser running for backfill
+        if (!fbBrowser.getBrowserStatus().running) {
+          const cookies = fbBrowser.getCookieStatus();
+          if (!cookies.loggedIn) {
+            log('  backfill 跳过：FB 未登录');
+          } else {
+            log('  backfill 启动浏览器...');
+            await fbBrowser.startBrowser();
+            await new Promise(r => setTimeout(r, 3000));
+          }
+        }
+        if (fbBrowser.getBrowserStatus().running) {
+          log('  FB 评论时间 backfill 开始（3 帖/24h）');
+          const result = await runBackfill({ limit: 3, daysBack: 30, logFn: log });
+          if (result.error) log(`  backfill 跳过: ${result.error}`);
+          else log(`  backfill 完成: visited=${result.visited} updated=${result.updated}`);
+          lastBackfillTime = Date.now();
+        }
+      } catch (err) { log(`  backfill 异常: ${err.message}`); }
     }
   }
 

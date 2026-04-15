@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import { loadConfig, saveConfig, getConfigForUI } from './config.js';
 import db, { getProducts, addProduct, updateProduct, deleteProduct } from './db.js';
 import * as fbBrowser from './facebook-browser.js';
+import { runBackfill, isBackfillRunning } from './backfill.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const JWT_SECRET = crypto.randomBytes(32).toString('hex');
@@ -886,102 +887,17 @@ app.get('/api/fb-browser/debug-dom', auth, async (req, res) => {
 });
 
 // Backfill FB comment created_utc by revisiting post permalinks.
-// Targets comments whose created_utc matches their parent post (inherited/estimated).
-// Rate-limited: max N posts per call, long delays between posts.
-let fbBackfillRunning = false;
+// Delegates core logic to backfill.js (shared with auto-scheduled task in index.js).
 app.post('/api/fb-browser/backfill-times', auth, async (req, res) => {
-  if (fbBackfillRunning) return res.status(409).json({ error: 'backfill already running' });
+  if (isBackfillRunning()) return res.status(409).json({ error: 'backfill already running' });
   if (fbBrowser.isScraping()) return res.status(409).json({ error: 'scrape in progress, try later' });
   const limit = Math.min(parseInt(req.body?.limit) || 3, 10);
   const daysBack = parseInt(req.body?.daysBack) || 30;
 
-  // Find posts with FB comments that inherited their timestamp from the post
-  // (i.e. comment.created_utc == post.created_utc — strong signal of estimated time)
-  const cutoff = Math.floor(Date.now() / 1000) - daysBack * 86400;
-  const candidatePosts = db.prepare(`
-    SELECT p.id AS post_id, p.permalink, p.project, p.created_utc, COUNT(c.id) AS est_comment_count
-    FROM mentions p
-    INNER JOIN mentions c
-      ON c.platform = 'facebook'
-      AND c.type = 'comment'
-      AND c.permalink = p.permalink
-      AND c.created_utc = p.created_utc
-    WHERE p.platform = 'facebook' AND p.type = 'post' AND p.created_utc > ?
-    GROUP BY p.id
-    HAVING est_comment_count > 0
-    ORDER BY est_comment_count DESC, p.created_utc DESC
-    LIMIT ?
-  `).all(cutoff, limit);
+  res.json({ ok: true, message: `backfill started (limit=${limit}, daysBack=${daysBack})` });
 
-  if (!candidatePosts.length) return res.json({ ok: true, message: 'no posts to backfill', processed: 0 });
-
-  res.json({ ok: true, message: `backfilling ${candidatePosts.length} posts (will take ~${candidatePosts.length * 2}min)`, posts: candidatePosts.length });
-
-  // Background task
-  fbBackfillRunning = true;
-  (async () => {
-    let updated = 0;
-    const updateStmt = db.prepare('UPDATE mentions SET created_utc = ? WHERE id = ?');
-    // Normalize for fuzzy body match: lowercase, collapse whitespace, strip punct
-    const norm = (s) => (s || '').toLowerCase().replace(/\s+/g, ' ').replace(/[^\w\s]/g, '').trim();
-
-    for (const post of candidatePosts) {
-      try {
-        if (fbBrowser.isScraping()) {
-          console.log('[backfill] scrape started, aborting');
-          break;
-        }
-        if (!fbBrowser.getPage()) {
-          console.log('[backfill] browser not running, aborting');
-          break;
-        }
-        console.log(`[backfill] visiting ${post.permalink}`);
-        const comments = await fbBrowser.scrapePostComments(post.permalink, 3);
-        console.log(`[backfill] got ${comments.length} comments with time`);
-
-        // Match DB comments by post permalink + fuzzy body/author; update created_utc
-        const dbComments = db.prepare(
-          `SELECT id, body, author, created_utc FROM mentions WHERE permalink = ? AND platform = 'facebook' AND type = 'comment' AND created_utc = ?`
-        ).all(post.permalink, post.created_utc);
-        console.log(`[backfill] ${dbComments.length} DB comments estimated for this post`);
-
-        let matched = 0;
-        for (const c of comments) {
-          if (!c.timeText || !c.body) continue;
-          const newUtc = fbBrowser.parseTimeText(c.timeText);
-          const scrapedBodyNorm = norm(c.body).slice(0, 40);
-          const scrapedAuthorName = (c.author || '').split('|||')[0].trim();
-
-          for (const dbc of dbComments) {
-            if (dbc.__matched) continue;
-            const dbBodyNorm = norm(dbc.body).slice(0, 40);
-            const dbAuthorName = (dbc.author || '').split('|||')[0].trim();
-            // Match on: normalized body prefix (>= 20 chars) OR author+shorter body
-            const bodyHit = scrapedBodyNorm.length >= 20 && dbBodyNorm.length >= 20 &&
-                            (dbBodyNorm.startsWith(scrapedBodyNorm.slice(0, 20)) ||
-                             scrapedBodyNorm.startsWith(dbBodyNorm.slice(0, 20)));
-            const authorHit = scrapedAuthorName && dbAuthorName && scrapedAuthorName === dbAuthorName &&
-                              norm(c.body).slice(0, 10) === norm(dbc.body).slice(0, 10);
-            if (bodyHit || authorHit) {
-              updateStmt.run(newUtc, dbc.id);
-              dbc.__matched = true;
-              matched++;
-              updated++;
-              break;
-            }
-          }
-        }
-        console.log(`[backfill] matched ${matched}/${comments.length} for this post`);
-
-        // Long delay between posts to respect FB rate limit
-        await new Promise(r => setTimeout(r, 90000 + Math.random() * 30000));
-      } catch (e) {
-        console.log(`[backfill] error on ${post.permalink}: ${e.message}`);
-      }
-    }
-    console.log(`[backfill] done: updated ${updated} comments`);
-    fbBackfillRunning = false;
-  })().catch(e => { console.log(`[backfill] fatal: ${e.message}`); fbBackfillRunning = false; });
+  // Run in background
+  runBackfill({ limit, daysBack }).catch(e => console.log(`[backfill] fatal: ${e.message}`));
 });
 
 // Debug: inspect comment time elements to find absolute timestamp location
