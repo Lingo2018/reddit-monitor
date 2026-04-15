@@ -169,15 +169,20 @@ app.get('/api/backup', auth, async (req, res) => {
   res.setHeader('Content-Type', 'application/gzip');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
-  // Include only stateful files; exclude WAL/SHM (WAL checkpointed into main DB by sqlite on read-only tar)
-  // Use --exclude to skip WAL/SHM sidecar files for clean restore
+  // Full self-contained backup: source + config + DB + cookies.
+  // Exclude: node_modules, logs, .git, WAL/SHM sidecars, screenshots.
+  // Archive root name = reddit-monitor/ for clean extraction.
   const args = [
     'czf', '-',
-    '--exclude=data/*.db-wal',
-    '--exclude=data/*.db-shm',
-    'config.json',
-    'data/reddit-monitor.db',
-    'data/fb-cookies.json',
+    '--exclude=./node_modules',
+    '--exclude=./logs',
+    '--exclude=./.git',
+    '--exclude=./data/*.db-wal',
+    '--exclude=./data/*.db-shm',
+    '--exclude=./data/screenshots',
+    '--exclude=./.env',
+    '--transform=s,^\\./,reddit-monitor/,',
+    '.',
   ];
   const tar = spawn('tar', args, { cwd: process.cwd() });
   tar.stdout.pipe(res);

@@ -1,95 +1,99 @@
 #!/bin/bash
-# Reddit Monitor — one-shot install / migration script
+# Reddit Monitor — standalone install script
 #
-# Usage:
-#   Fresh install:       ./install.sh
-#   Restore from backup: ./install.sh /path/to/backup.tar.gz
+# Run this script from inside an extracted backup directory:
+#   tar xzf reddit-monitor-backup-XXXX.tar.gz
+#   cd reddit-monitor
+#   ./install.sh
 #
-# Does:
+# What it does:
 #   1. Install Node.js 22 LTS (if missing)
-#   2. git clone the repo (if not already in it)
-#   3. npm install
-#   4. Install Playwright Chromium (for FB automation)
-#   5. Install Xvfb (for headful FB stealth on servers)
-#   6. If backup path provided: extract config.json + data/ from tar.gz
-#   7. Otherwise: copy config.example.json → config.json (user edits manually)
-#   8. Print systemd unit snippet
+#   2. npm install
+#   3. Install Playwright Chromium + deps (for FB automation)
+#   4. Install Xvfb (headful stealth on server)
+#   5. Print systemd unit snippet
+#
+# No network dependency on GitHub — the tar.gz is self-contained.
 set -e
 
-BACKUP="${1:-}"
-REPO_URL="https://github.com/Lingo2018/reddit-monitor.git"
-INSTALL_DIR="${INSTALL_DIR:-$PWD/reddit-monitor}"
-
-echo "=== Reddit Monitor 安装脚本 ==="
+echo "=== Reddit Monitor 安装 ==="
 echo ""
+
+# Sanity check: we should be inside the repo dir
+if [ ! -f "package.json" ] || [ ! -f "index.js" ]; then
+  echo "Error: must run from the extracted backup directory (missing package.json / index.js)"
+  echo "Usage: tar xzf backup.tar.gz && cd reddit-monitor && ./install.sh"
+  exit 1
+fi
 
 # 1. Node.js
 if ! command -v node &> /dev/null || [ "$(node -v | sed 's/v//' | cut -d. -f1)" -lt 18 ]; then
-  echo "[1/7] 安装 Node.js 22..."
+  echo "[1/5] Installing Node.js 22..."
   if command -v apt &> /dev/null; then
     curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
     sudo apt install -y nodejs
   elif command -v yum &> /dev/null; then
     curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo -E bash -
     sudo yum install -y nodejs
+  elif command -v dnf &> /dev/null; then
+    curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo -E bash -
+    sudo dnf install -y nodejs
   else
-    echo "Error: please install Node.js 18+ manually: https://nodejs.org/"
+    echo "Error: install Node.js 18+ manually: https://nodejs.org/"
     exit 1
   fi
 fi
-echo "[1/7] Node.js: $(node -v)"
+echo "[1/5] Node.js: $(node -v)"
 
-# 2. Repo
-if [ ! -f "package.json" ] || [ ! -f "index.js" ]; then
-  echo "[2/7] Cloning repo to $INSTALL_DIR..."
-  git clone "$REPO_URL" "$INSTALL_DIR"
-  cd "$INSTALL_DIR"
-else
-  echo "[2/7] Already in repo dir"
-fi
-
-# 3. npm deps
-echo "[3/7] npm install..."
+# 2. npm deps
+echo "[2/5] npm install..."
 npm install --production
 
-# 4. Playwright Chromium
-echo "[4/7] Installing Playwright Chromium..."
-npx playwright install chromium || echo "  (warning: playwright install failed, FB scraping will not work)"
+# 3. Playwright Chromium (bundled browser + system deps)
+echo "[3/5] Installing Playwright Chromium..."
+npx playwright install chromium || echo "  (warning: chromium install failed, FB scraping will not work)"
+if command -v apt &> /dev/null; then
+  sudo npx playwright install-deps chromium 2>/dev/null || true
+fi
 
-# 5. Xvfb (required for headful stealth on headless servers)
-echo "[5/7] Installing Xvfb..."
+# 4. Xvfb (required for headful stealth on headless servers)
+echo "[4/5] Installing Xvfb..."
 if command -v apt &> /dev/null; then
   sudo apt install -y xvfb
 elif command -v yum &> /dev/null; then
   sudo yum install -y xorg-x11-server-Xvfb
+elif command -v dnf &> /dev/null; then
+  sudo dnf install -y xorg-x11-server-Xvfb
 fi
 
-# 6. Data dirs + config
+# 5. Data dirs
 mkdir -p data logs
 
-if [ -n "$BACKUP" ] && [ -f "$BACKUP" ]; then
-  echo "[6/7] Restoring from backup: $BACKUP"
-  tar xzf "$BACKUP" -C .
-  echo "  restored: $(tar tzf "$BACKUP" | tr '\n' ' ')"
-else
-  if [ ! -f config.json ]; then
+if [ ! -f config.json ]; then
+  if [ -f config.example.json ]; then
     cp config.example.json config.json
-    echo "[6/7] Created config.json (edit before starting)"
+    echo "  Created config.json from example (edit it before starting)"
   else
-    echo "[6/7] config.json already exists, skipping"
+    echo "  Warning: no config.json and no config.example.json — you must create one"
   fi
+else
+  echo "  config.json found (from backup)"
 fi
 
-# 7. Systemd unit template
+if [ -f data/reddit-monitor.db ]; then
+  DB_SIZE=$(du -h data/reddit-monitor.db | cut -f1)
+  echo "  Database found: data/reddit-monitor.db ($DB_SIZE)"
+fi
+if [ -f data/fb-cookies.json ]; then
+  echo "  FB cookies found: data/fb-cookies.json"
+fi
+
 echo ""
-echo "[7/7] Installation complete."
+echo "=== [5/5] 安装完成 ==="
 echo ""
 echo "--- Next steps ---"
-if [ -z "$BACKUP" ]; then
-  echo "  1. Edit config.json (API keys, projects, webPassword)"
-fi
-echo "  2. Test run:    node index.js"
-echo "  3. Systemd:     sudo tee /etc/systemd/system/reddit-monitor.service <<EOF"
+echo "  Test run:    node index.js"
+echo "  Systemd:     sudo tee /etc/systemd/system/reddit-monitor.service > /dev/null <<EOF"
 cat <<EOF
 [Unit]
 Description=Reddit/Facebook Monitor
@@ -109,7 +113,7 @@ StandardError=append:$(pwd)/logs/out.log
 WantedBy=multi-user.target
 EOF
 echo "EOF"
-echo "     sudo systemctl daemon-reload"
-echo "     sudo systemctl enable --now reddit-monitor"
+echo "               sudo systemctl daemon-reload"
+echo "               sudo systemctl enable --now reddit-monitor"
 echo ""
-echo "  Web UI: http://<server>:3000 (or configured webPort)"
+echo "  Web UI:      http://<server>:\$(grep webPort config.json | head -1 | grep -o '[0-9]\+')"
