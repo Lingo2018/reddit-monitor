@@ -1567,9 +1567,29 @@ async function renderGlobalSettings() {
   app.innerHTML = `
     <div class="section">
       <h3>数据备份 / 迁移</h3>
-      <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px">一键打包源码、配置、数据库、Cookies(含 FB 登录态) 为 tar.gz,新服务器 <code>./install.sh</code> 直接跑。</p>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px">一键打包源码、配置、数据库、Cookies(含 FB 登录态)为 tar.gz,新服务器 <code>./install.sh</code> 直接跑,不依赖 GitHub。</p>
       <button class="btn btn-primary btn-sm" id="download-backup">下载完整备份</button>
       <span id="backup-status" style="font-size:12px;color:var(--text-muted);margin-left:10px"></span>
+      <details style="margin-top:12px;font-size:12px;color:var(--text-muted)">
+        <summary style="cursor:pointer;user-select:none">新服务器迁移步骤（点击展开）</summary>
+        <div style="margin-top:8px;padding:10px 12px;background:rgba(0,0,0,0.2);border-radius:6px;line-height:1.7">
+          <div style="margin-bottom:6px"><b style="color:var(--text)">1. 下载备份</b> — 点上面的按钮,浏览器会下载 <code>reddit-monitor-backup-XXXX.tar.gz</code>(~2 MB)</div>
+          <div style="margin-bottom:6px"><b style="color:var(--text)">2. 传到新服务器</b></div>
+          <pre style="margin:4px 0;padding:8px;background:rgba(0,0,0,0.3);border-radius:4px;font-size:11px;color:#ddd;white-space:pre-wrap">scp reddit-monitor-backup-*.tar.gz user@newserver:~/</pre>
+          <div style="margin-bottom:6px"><b style="color:var(--text)">3. 解压 + 一键安装</b>(会自动装 Node 22 / Chromium / Xvfb)</div>
+          <pre style="margin:4px 0;padding:8px;background:rgba(0,0,0,0.3);border-radius:4px;font-size:11px;color:#ddd;white-space:pre-wrap">ssh user@newserver
+tar xzf reddit-monitor-backup-*.tar.gz
+cd reddit-monitor
+./install.sh</pre>
+          <div style="margin-bottom:6px"><b style="color:var(--text)">4. 脚本结束后会打印 systemd 单元模板</b>,按提示粘贴即可:</div>
+          <pre style="margin:4px 0;padding:8px;background:rgba(0,0,0,0.3);border-radius:4px;font-size:11px;color:#ddd;white-space:pre-wrap">sudo systemctl daemon-reload
+sudo systemctl enable --now reddit-monitor</pre>
+          <div style="margin-top:10px"><b style="color:var(--text)">保留的内容</b>:配置(AI key / 代理 / 项目)、数据库(mentions / analysis / 日报)、FB 登录 Cookies、Web 密码。</div>
+          <div style="margin-top:4px"><b style="color:var(--text)">不保留的内容</b>:node_modules(重装)、历史日志、.git。</div>
+          <div style="margin-top:6px;color:#f39c12">⚠️ FB Cookies 可能因新 IP 被 FB 要求重新验证,若登录失效在"Facebook 设置"里重新"启动浏览器 → 登录 → 保存 Cookies"。</div>
+          <div style="margin-top:6px">详细文档 + 排障见备份包内的 <code>MIGRATION.md</code>。</div>
+        </div>
+      </details>
     </div>
     <div class="section">
       <h3>${t('aiSetting')}</h3>
