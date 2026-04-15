@@ -1316,6 +1316,12 @@ async function renderFacebookConfig() {
           </div>
         </div>
       </details>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;padding-top:10px;border-top:1px solid var(--border)">
+        <button class="btn btn-primary btn-sm" id="fb-scrape-all">立即抓取全部 Group</button>
+        <button class="btn btn-outline btn-sm" id="fb-fix-authors">修复 Unknown 作者</button>
+        <span id="fb-scrape-status" style="font-size:12px;color:var(--text-muted)"></span>
+      </div>
+      <pre id="fb-scrape-log" style="font-size:11px;color:var(--text-muted);background:rgba(0,0,0,0.2);padding:10px;border-radius:6px;max-height:200px;overflow-y:auto;white-space:pre-wrap;margin-bottom:12px">(等待抓取日志...)</pre>
       <div id="fb-browser-view" style="display:${browserRunning ? 'block' : 'none'};margin-bottom:16px">
         <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#000;cursor:crosshair;max-width:600px" id="fb-screen-container">
           <img id="fb-screenshot" style="width:100%;display:block" alt="Browser view">
@@ -1336,14 +1342,11 @@ async function renderFacebookConfig() {
 
     <div class="section">
       <h3>${t('projects')} — Facebook</h3>
+      <button class="btn btn-outline btn-sm" id="fb-add-project-top" style="margin-bottom:10px">${t('addProject')}</button>
       <div id="fb-projects-list"></div>
-      <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <div style="margin-top:10px">
         <button class="btn btn-outline" id="fb-add-project">${t('addProject')}</button>
-        <button class="btn btn-primary btn-sm" id="fb-scrape-all">立即抓取全部 Group</button>
-        <button class="btn btn-outline btn-sm" id="fb-fix-authors">修复 Unknown 作者</button>
-        <span id="fb-scrape-status" style="font-size:12px;color:var(--text-muted)"></span>
       </div>
-      <pre id="fb-scrape-log" style="font-size:11px;color:var(--text-muted);background:rgba(0,0,0,0.2);padding:10px;border-radius:6px;max-height:200px;overflow-y:auto;white-space:pre-wrap;display:none;margin-top:10px"></pre>
     </div>
 
     <div style="margin-top:16px">
@@ -1359,33 +1362,50 @@ async function renderFacebookConfig() {
 
   function renderFbProjects() {
     fbProjectsList.innerHTML = fbProjects.map((p, i) => `
-      <div class="project-card" data-idx="${i}">
-        <div class="project-header">
-          <h4>${esc(p.name || p.id || 'Project ' + (i + 1))}</h4>
+      <div class="project-card collapsed" data-idx="${i}">
+        <div class="project-header" style="cursor:pointer">
+          <h4><span class="collapse-arrow" style="display:inline-block;width:14px;color:var(--text-muted);transition:transform 0.15s">▸</span> ${esc(p.name || p.id || 'Project ' + (i + 1))}</h4>
           <div class="btn-group">
             <label style="font-size:12px"><input type="checkbox" class="fp-enabled" ${p.enabled !== false ? 'checked' : ''}> ${t('enabled')}</label>
             <button class="btn btn-outline btn-sm fp-del">${t('deleteProject')}</button>
           </div>
         </div>
-        <input type="hidden" class="fp-id" value="${esc(p.id || '')}">
-        <div class="form-group"><label>${t('projectName')}</label><input class="fp-name" value="${esc(p.name || '')}" autocomplete="off"></div>
-        <div class="form-group"><label>${t('reportRole')}</label><textarea class="fp-role" rows="2" placeholder="${t('reportRoleHint')}">${esc(p.reportRole || '')}</textarea></div>
-        <div class="form-group"><label>${t('fbGroups')}</label><textarea class="fp-groups" rows="3" placeholder="groupId:名称，每行一个">${(p.facebookGroups || []).map(g => typeof g === 'string' ? g : g.groupId + ':' + (g.name || '')).join('\n')}</textarea></div>
+        <div class="project-body" style="display:none">
+          <input type="hidden" class="fp-id" value="${esc(p.id || '')}">
+          <div class="form-group"><label>${t('projectName')}</label><input class="fp-name" value="${esc(p.name || '')}" autocomplete="off"></div>
+          <div class="form-group"><label>${t('reportRole')}</label><textarea class="fp-role" rows="2" placeholder="${t('reportRoleHint')}">${esc(p.reportRole || '')}</textarea></div>
+          <div class="form-group"><label>${t('fbGroups')}</label><textarea class="fp-groups" rows="3" placeholder="groupId:名称，每行一个">${(p.facebookGroups || []).map(g => typeof g === 'string' ? g : g.groupId + ':' + (g.name || '')).join('\n')}</textarea></div>
+        </div>
       </div>`).join('');
 
-    document.querySelectorAll('.fp-del').forEach(btn => {
-      btn.onclick = () => {
+    fbProjectsList.querySelectorAll('.project-card').forEach(card => {
+      const header = card.querySelector('.project-header');
+      const body = card.querySelector('.project-body');
+      const arrow = card.querySelector('.collapse-arrow');
+      header.onclick = (e) => {
+        if (e.target.closest('.btn-group')) return;
+        const expanded = body.style.display === 'block';
+        body.style.display = expanded ? 'none' : 'block';
+        arrow.style.transform = expanded ? '' : 'rotate(90deg)';
+      };
+    });
+    fbProjectsList.querySelectorAll('.fp-del').forEach(btn => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
         fbProjects.splice(+btn.closest('.project-card').dataset.idx, 1);
         renderFbProjects();
       };
     });
+    fbProjectsList.querySelectorAll('.fp-enabled').forEach(cb => { cb.onclick = (e) => e.stopPropagation(); });
   }
   renderFbProjects();
 
-  $('#fb-add-project').onclick = () => {
+  const addFbProject = () => {
     fbProjects.push({ id: 'fb_' + Date.now().toString(36), name: '', enabled: true, facebookGroups: [] });
     renderFbProjects();
   };
+  $('#fb-add-project').onclick = addFbProject;
+  $('#fb-add-project-top').onclick = addFbProject;
 
   const doSaveFb = async () => {
     const lines = v => v.split('\n').map(s => s.trim()).filter(Boolean);
@@ -1481,16 +1501,18 @@ async function renderFacebookConfig() {
   $('#fb-nav-go').onclick = async () => { const url = $('#fb-nav-url').value.trim(); if (url) await api('/fb-browser/navigate', { method: 'POST', body: { url } }).catch(e => toast(e.message)); };
   $('#fb-nav-url').onkeydown = (e) => { if (e.key === 'Enter') $('#fb-nav-go').click(); };
 
-  // Scrape handlers
+  // Scrape handlers — log panel stays always visible
   const updateScrapeLog = async () => {
     try {
       const res = await api('/fb-browser/scrape-status'); const d = await res.json();
       const logEl = $('#fb-scrape-log'); const statusEl = $('#fb-scrape-status');
-      if (d.log?.length) { logEl.style.display = 'block'; logEl.textContent = d.log.join('\n'); logEl.scrollTop = logEl.scrollHeight; }
+      if (d.log?.length) { logEl.textContent = d.log.join('\n'); logEl.scrollTop = logEl.scrollHeight; }
       if (d.running) { statusEl.innerHTML = '<span style="color:var(--orange)">抓取中...</span>'; return true; }
       else { statusEl.textContent = d.log?.length ? '抓取完成' : ''; return false; }
     } catch { return false; }
   };
+  // Load log once on page render (so it's visible even when not scraping)
+  updateScrapeLog();
   const pollScrapeStatus = () => { const timer = setInterval(async () => { if (!(await updateScrapeLog())) clearInterval(timer); }, 2000); };
 
   $('#fb-scrape-all').onclick = async () => {
@@ -1624,6 +1646,7 @@ async function renderConfig() {
   app.innerHTML = `
     <div class="section">
       <h3>${t('projects')} — Reddit</h3>
+      <button class="btn btn-outline btn-sm" id="add-project-top" style="margin-bottom:10px">${t('addProject')}</button>
       <div id="projects-list"></div>
       <button class="btn btn-outline" id="add-project" style="margin-top:10px">${t('addProject')}</button>
     </div>
@@ -1633,31 +1656,47 @@ async function renderConfig() {
   const projectsList = $('#projects-list');
   function renderProjects(projects) {
     projectsList.innerHTML = projects.map((p, i) => `
-      <div class="project-card" data-idx="${i}">
-        <div class="project-header">
-          <h4>${esc(p.name || p.id || 'Project ' + (i + 1))}</h4>
+      <div class="project-card collapsed" data-idx="${i}">
+        <div class="project-header" style="cursor:pointer">
+          <h4><span class="collapse-arrow" style="display:inline-block;width:14px;color:var(--text-muted);transition:transform 0.15s">▸</span> ${esc(p.name || p.id || 'Project ' + (i + 1))}</h4>
           <div class="btn-group">
             <label style="font-size:12px"><input type="checkbox" class="p-enabled" ${p.enabled !== false ? 'checked' : ''}> ${t('enabled')}</label>
             <button class="btn btn-outline btn-sm del-project">${t('deleteProject')}</button>
           </div>
         </div>
-        <input type="hidden" class="p-id" value="${esc(p.id || '')}">
-        <div class="form-group"><label>${t('projectName')}</label><input class="p-name" value="${esc(p.name || '')}" autocomplete="off"></div>
-        <div class="form-group"><label>${t('reportRole')}</label><textarea class="p-role" rows="2" placeholder="${t('reportRoleHint')}">${esc(p.reportRole || '')}</textarea></div>
-        <div class="form-group"><label>${t('subreddits')}</label><textarea class="p-subs">${(p.subreddits || []).join('\n')}</textarea></div>
+        <div class="project-body" style="display:none">
+          <input type="hidden" class="p-id" value="${esc(p.id || '')}">
+          <div class="form-group"><label>${t('projectName')}</label><input class="p-name" value="${esc(p.name || '')}" autocomplete="off"></div>
+          <div class="form-group"><label>${t('reportRole')}</label><textarea class="p-role" rows="2" placeholder="${t('reportRoleHint')}">${esc(p.reportRole || '')}</textarea></div>
+          <div class="form-group"><label>${t('subreddits')}</label><textarea class="p-subs">${(p.subreddits || []).join('\n')}</textarea></div>
+        </div>
       </div>`).join('');
-    document.querySelectorAll('.del-project').forEach(btn => {
-      btn.onclick = () => { projects.splice(+btn.closest('.project-card').dataset.idx, 1); renderProjects(projects); };
+    document.querySelectorAll('.project-card').forEach(card => {
+      const header = card.querySelector('.project-header');
+      const body = card.querySelector('.project-body');
+      const arrow = card.querySelector('.collapse-arrow');
+      header.onclick = (e) => {
+        if (e.target.closest('.btn-group')) return;
+        const expanded = body.style.display === 'block';
+        body.style.display = expanded ? 'none' : 'block';
+        arrow.style.transform = expanded ? '' : 'rotate(90deg)';
+      };
     });
+    document.querySelectorAll('.del-project').forEach(btn => {
+      btn.onclick = (e) => { e.stopPropagation(); projects.splice(+btn.closest('.project-card').dataset.idx, 1); renderProjects(projects); };
+    });
+    document.querySelectorAll('.p-enabled').forEach(cb => { cb.onclick = (e) => e.stopPropagation(); });
   }
 
   const projects = cfg.projects || [];
   renderProjects(projects);
 
-  $('#add-project').onclick = () => {
+  const addProject = () => {
     projects.push({ id: 'rd_' + Date.now().toString(36), name: '', enabled: true, subreddits: [] });
     renderProjects(projects);
   };
+  $('#add-project').onclick = addProject;
+  $('#add-project-top').onclick = addProject;
 
   const doSave = async () => {
     const lines = v => v.split('\n').map(s => s.trim()).filter(Boolean);
