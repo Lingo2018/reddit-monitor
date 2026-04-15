@@ -159,6 +159,38 @@ app.put('/api/config', auth, (req, res) => {
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 
+// --- Backup: stream tar.gz of stateful files (config + DB + cookies) ---
+app.get('/api/backup', auth, async (req, res) => {
+  const { spawn } = await import('node:child_process');
+  // Checkpoint WAL → main db so the .db file has all recent writes
+  try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch (e) { console.error('[backup] wal checkpoint:', e.message); }
+  const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+  const filename = `reddit-monitor-backup-${ts}.tar.gz`;
+  res.setHeader('Content-Type', 'application/gzip');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+  // Include only stateful files; exclude WAL/SHM (WAL checkpointed into main DB by sqlite on read-only tar)
+  // Use --exclude to skip WAL/SHM sidecar files for clean restore
+  const args = [
+    'czf', '-',
+    '--exclude=data/*.db-wal',
+    '--exclude=data/*.db-shm',
+    'config.json',
+    'data/reddit-monitor.db',
+    'data/fb-cookies.json',
+  ];
+  const tar = spawn('tar', args, { cwd: process.cwd() });
+  tar.stdout.pipe(res);
+  tar.stderr.on('data', d => console.error('[backup]', d.toString()));
+  tar.on('close', code => {
+    if (code !== 0) console.error(`[backup] tar exited ${code}`);
+  });
+  tar.on('error', err => {
+    console.error('[backup] spawn error:', err.message);
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+  });
+});
+
 // --- AI Test ---
 app.get('/api/ai-test', auth, async (req, res) => {
   const cfg = loadConfig();

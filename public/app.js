@@ -1645,6 +1645,12 @@ async function renderConfig() {
 
   app.innerHTML = `
     <div class="section">
+      <h3>数据备份 / 迁移</h3>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px">一键打包当前配置、数据库、Cookies(含 FB 登录态)为 tar.gz,便于迁移到新服务器。</p>
+      <button class="btn btn-primary btn-sm" id="download-backup">下载完整备份</button>
+      <span id="backup-status" style="font-size:12px;color:var(--text-muted);margin-left:10px"></span>
+    </div>
+    <div class="section">
       <h3>${t('projects')} — Reddit</h3>
       <button class="btn btn-outline btn-sm" id="add-project-top" style="margin-bottom:10px">${t('addProject')}</button>
       <div id="projects-list"></div>
@@ -1652,6 +1658,26 @@ async function renderConfig() {
     </div>
     <div style="margin-top:16px"><button class="btn btn-primary" id="save-config">${t('saveConfig')}</button></div>
     <div class="floating-save"><button class="btn btn-primary" id="save-config-float">${t('saveConfig')}</button></div>`;
+
+  $('#download-backup').onclick = async () => {
+    const statusEl = $('#backup-status');
+    statusEl.textContent = '生成中...';
+    try {
+      const res = await api('/backup');
+      if (!res.ok) throw new Error(await res.text());
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+      a.href = url;
+      a.download = `reddit-monitor-backup-${ts}.tar.gz`;
+      a.click();
+      URL.revokeObjectURL(url);
+      statusEl.textContent = `已下载 (${(blob.size / 1024 / 1024).toFixed(1)} MB)`;
+    } catch (e) {
+      statusEl.textContent = '失败: ' + e.message;
+    }
+  };
 
   const projectsList = $('#projects-list');
   function renderProjects(projects) {
